@@ -161,6 +161,7 @@ def main():
     stack.close()
     matches = re.findall(r'Fluor=".*?"', ome)
     matches = [m.replace('Fluor=', '').replace('"', '') for m in matches]
+    matches = [re.sub(r'c\d+\s+', '', m) for m in matches]  # remove cycle name
 
     channels = dict()
     for i, channel in enumerate(matches):
