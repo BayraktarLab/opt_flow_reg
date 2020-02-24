@@ -42,12 +42,15 @@ def read_image(path: str, key: int):
 
 
 def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray, f: int, t: int):
-    flow = cv.calcOpticalFlowFarneback(moving_img[f:t, :], ref_img[f:t, :], None, pyr_scale=0.6, levels=5,
+    return cv.calcOpticalFlowFarneback(moving_img[f:t, :], ref_img[f:t, :], None, pyr_scale=0.6, levels=5,
                                        winsize=21,
                                        iterations=3, poly_n=7, poly_sigma=1.3,
                                        flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
-    warped_img = warp_flow(moving_img[f:t, :], flow)
-    return warped_img, flow
+
+
+def warp_pieces(moving_img: np.ndarray, flow: np.ndarray, f: int, t: int):
+    return warp_flow(moving_img[f:t, :], flow)
+
 
 def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback'):
     """ Calculates optical flow from moving_img to ref_img.
@@ -69,7 +72,17 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
 
         task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov, f, t))
 
-    warp_li, flow_li = dask.compute(*task, scheduler='processes', nout=2)
+    flow_li = dask.compute(*task, scheduler='processes')
+    print(len(flow_li), n_pieces)
+    for i in range(0, n_pieces):
+        f = i * row_pieces
+        t = f + row_pieces
+        if i == n_pieces - 1:
+            t = ref_img.shape[0]
+
+        task.append(dask.delayed(warp_pieces)(delayed_mov, flow_li[i], f, t))
+
+    warp_li = dask.compute(*task, scheduler='processes')
     """
     if method == 'farneback':
         flow = cv.calcOpticalFlowFarneback(moving_img[f:t, :], ref_img[f:t, :], None, pyr_scale=0.6, levels=5,
