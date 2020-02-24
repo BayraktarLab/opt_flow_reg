@@ -177,8 +177,10 @@ def main():
             channels.append(0)
     
     # check if reference channel is available
-    if ref_channel not in list(channels.keys()):
-        raise ValueError('Incorrect reference channel. Available reference channels ' + ', '.join(list(channels.keys())))
+    if ref_channel not in matches:
+        raise ValueError('Incorrect reference channel. Available reference channels ' + ', '.join(set(matches)))
+
+    # perform registration of full stack
     register(in_path, out_path, channels, ome)
 
     fin = datetime.now()

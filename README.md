@@ -1,4 +1,6 @@
-# Optical flow based regstration
+# Optical flow based registration
+
+Currently limited to stack of maxz projections.
 
 ## Command line arguments
 
