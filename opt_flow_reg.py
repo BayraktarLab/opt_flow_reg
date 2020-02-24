@@ -66,7 +66,7 @@ def reg_big_image(ref_img, moving_img, method='farneback'):
 
 def register(in_path: str, out_path: str, channels: dict):
 
-    filename = os.path.basename(in_path)
+    filename = os.path.basename(in_path).replace('.tif','opt_flow.tif')
     ref_ch_ids = [i for i, c in enumerate(list(channels.values())) if c == 1]
     first_ref = ref_ch_ids[0]
 
@@ -165,7 +165,9 @@ def main():
             channels[channel] = 1
         else:
             channels[channel] = 0
-
+    
+    if ref_channel not in list(channels.keys()):
+        raise ValueError('Incorrect reference channel. Available reference channels ' + ', '.join(list(channels.keys()))
     register(in_path, out_path, channels)
 
     fin = datetime.now()
