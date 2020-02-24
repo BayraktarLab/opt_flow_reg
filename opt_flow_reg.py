@@ -26,6 +26,7 @@ def draw_hsv(flow):
 
 def warp_flow(img, flow):
     """ Warps iput image according to optical flow """
+    flow = np.copy(flow)    # copy for dask
     h, w = flow.shape[:2]
     flow = -flow
     flow[:, :, 0] += np.arange(w)
@@ -41,8 +42,8 @@ def read_image(path: str, key: int):
     return cv.normalize(tif.imread(path, key=key), None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
 
 
-def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray, fro: int, to: int):
-    flow = cv.calcOpticalFlowFarneback(moving_img[fro: to, :], ref_img[fro: to, :], None, pyr_scale=0.6, levels=5,
+def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray):
+    flow = cv.calcOpticalFlowFarneback(moving_img, ref_img, None, pyr_scale=0.6, levels=5,
                                        winsize=21,
                                        iterations=3, poly_n=7, poly_sigma=1.3,
                                        flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
@@ -65,7 +66,7 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
         if i == n_pieces - 1:
             t = ref_img.shape[0]
 
-        task.append(dask.delayed(register_pieces)(ref_img, moving_img, f, t))
+        task.append(dask.delayed(register_pieces)(ref_img[f:t, :], moving_img[f:t, :]))
 
     warp_li, flow_li = dask.compute(*task, scheduler='processes')
     """
@@ -103,7 +104,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
             im1 = read_image(in_path, key=this_ref)
             im2 = read_image(in_path, key=next_ref)
             im2_warped, flow = reg_big_image(im1, im2, method='farneback')
-
+            del im2
             ch_before_first_ref = []
             if first_ref == 0:
                 ch_before_first_ref = None
@@ -127,7 +128,6 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
             else:
                 TW_img.save(np.stack((*ch_before_first_ref, im1, *ch_before_second_ref, im2_warped), axis=0), photometric='minisblack', description=meta)
 
-            del im2
             gc.collect()
             # TW_flow.save(flow[:,:,:], photometric='minisblack')
         else:
