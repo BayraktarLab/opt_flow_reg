@@ -10,6 +10,7 @@ import cv2 as cv
 
 
 def draw_hsv(flow):
+    """ Can be used to visualize optical flow """
     h, w = flow.shape[:2]
     fx, fy = flow[:, :, 0], flow[:, :, 1]
     ang = np.arctan2(fy, fx) + np.pi
@@ -23,6 +24,7 @@ def draw_hsv(flow):
 
 
 def warp_flow(img, flow):
+    """ Warps iput image according to optical flow """
     h, w = flow.shape[:2]
     flow = -flow
     flow[:, :, 0] += np.arange(w)
@@ -65,8 +67,8 @@ def reg_big_image(ref_img, moving_img, method='farneback'):
 
 
 def register(in_path: str, out_path: str, channels: dict):
-
-    filename = os.path.basename(in_path).replace('.tif','opt_flow.tif')
+    """ Read images and register them sequentially: 1<-2, 2<-3, 3<-4 etc. """
+    filename = os.path.basename(in_path).replace('.tif', 'opt_flow.tif')
     ref_ch_ids = [i for i, c in enumerate(list(channels.values())) if c == 1]
     first_ref = ref_ch_ids[0]
 
@@ -74,6 +76,7 @@ def register(in_path: str, out_path: str, channels: dict):
     for i in range(0, len(ref_ch_ids)):
         this_ref = ref_ch_ids[i]
         next_ref = ref_ch_ids[i + 1]
+        
         # first reference channel processed separately from other
         if i == first_ref:
             print('Processing cycle', i)
@@ -153,7 +156,7 @@ def main():
 
     stack = tif.TiffFile(in_path, is_ome=True)
 
-    # find selected channels
+    # find selected reference channels
     ome = stack.ome_metadata
     stack.close()
     matches = re.findall(r'Fluor=".*?"', ome)
@@ -166,8 +169,9 @@ def main():
         else:
             channels[channel] = 0
     
+    # check if reference channel is available
     if ref_channel not in list(channels.keys()):
-        raise ValueError('Incorrect reference channel. Available reference channels ' + ', '.join(list(channels.keys()))
+        raise ValueError('Incorrect reference channel. Available reference channels ' + ', '.join(list(channels.keys())))
     register(in_path, out_path, channels)
 
     fin = datetime.now()
