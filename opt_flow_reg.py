@@ -68,10 +68,12 @@ def reg_big_image(ref_img, moving_img, method='farneback'):
     return img_assembled, flow_assembled
 
 
-def register(in_path: str, out_path: str, channels: dict):
+def register(in_path: str, out_path: str, channels: list, meta: str):
     """ Read images and register them sequentially: 1<-2, 2<-3, 3<-4 etc. """
     filename = os.path.basename(in_path).replace('.tif', '_opt_flow.tif')
-    ref_ch_ids = [i for i, c in enumerate(list(channels.values())) if c == 1]
+    print(channels)
+    ref_ch_ids = [i for i, c in enumerate(channels) if c == 1]
+    print(ref_ch_ids)
     first_ref = ref_ch_ids[0]
 
     TW_img = tif.TiffWriter(out_path + filename, bigtiff=True)
@@ -102,13 +104,13 @@ def register(in_path: str, out_path: str, channels: dict):
                     ch_before_second_ref.append(warp_flow(read_image(in_path, key=c), flow))
 
             if ch_before_first_ref is None and ch_before_second_ref is None:
-                TW_img.save(np.stack((im1, im2_warped), axis=0), photometric='minisblack')
+                TW_img.save(np.stack((im1, im2_warped), axis=0), photometric='minisblack', description=meta)
             elif ch_before_first_ref is not None and ch_before_second_ref is None:
-                TW_img.save(np.stack((*ch_before_first_ref, im1, im2_warped), axis=0), photometric='minisblack')
+                TW_img.save(np.stack((*ch_before_first_ref, im1, im2_warped), axis=0), photometric='minisblack', description=meta)
             elif ch_before_first_ref is None and ch_before_second_ref is not None:
-                TW_img.save(np.stack((im1, *ch_before_second_ref, im2_warped), axis=0), photometric='minisblack')
+                TW_img.save(np.stack((im1, *ch_before_second_ref, im2_warped), axis=0), photometric='minisblack', description=meta)
             else:
-                TW_img.save(np.stack((*ch_before_first_ref, im1, *ch_before_second_ref, im2_warped), axis=0), photometric='minisblack')
+                TW_img.save(np.stack((*ch_before_first_ref, im1, *ch_before_second_ref, im2_warped), axis=0), photometric='minisblack', description=meta)
 
             del im2
             gc.collect()
@@ -126,9 +128,9 @@ def register(in_path: str, out_path: str, channels: dict):
                     ch_before_next_ref.append(warp_flow(read_image(in_path, key=c), flow))
 
             if ch_before_next_ref is None:
-                TW_img.save(im2_warped, photometric='minisblack')
+                TW_img.save(im2_warped, photometric='minisblack', description=meta)
             else:
-                TW_img.save(np.stack((ch_before_next_ref, im2_warped), axis=0), photometric='minisblack')
+                TW_img.save(np.stack((ch_before_next_ref, im2_warped), axis=0), photometric='minisblack', description=meta)
 
             del im2
             gc.collect()
@@ -166,17 +168,18 @@ def main():
     matches = [m.replace('Fluor=', '').replace('"', '') for m in matches]
     matches = [re.sub(r'c\d+\s+', '', m) for m in matches]  # remove cycle name
 
-    channels = dict()
+    # encode reference channels as 1 other 0
+    channels = []
     for i, channel in enumerate(matches):
         if channel == ref_channel:
-            channels[channel] = 1
+            channels.append(1)
         else:
-            channels[channel] = 0
+            channels.append(0)
     
     # check if reference channel is available
     if ref_channel not in list(channels.keys()):
         raise ValueError('Incorrect reference channel. Available reference channels ' + ', '.join(list(channels.keys())))
-    register(in_path, out_path, channels)
+    register(in_path, out_path, channels, ome)
 
     fin = datetime.now()
     print('time elapsed', fin - st)
