@@ -111,18 +111,20 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
     first_ref = ref_ch_ids[0]
 
     TW_img = tif.TiffWriter(out_path + filename, bigtiff=True)
-    for i in range(0, len(ref_ch_ids)):
+    for i in range(0, len(ref_ch_ids) - 1):
         this_ref = ref_ch_ids[i]
         next_ref = ref_ch_ids[i + 1]
+        print('Processing cycle', i)
         
         # first reference channel processed separately from other
         if this_ref == first_ref:
-            print('Processing cycle', i)
-            # warp channels
             im1 = read_image(in_path, key=this_ref)
             im2 = read_image(in_path, key=next_ref)
+            # register and warp 2nd ref image and get optical flow
             im2_warped, flow = reg_big_image(im1, im2, method='farneback')
             del im2
+
+            # collect images before first reference image if they exist
             ch_before_first_ref = []
             if first_ref == 0:
                 ch_before_first_ref = None
@@ -130,6 +132,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                 for c in range(0, first_ref):
                     ch_before_first_ref.append(read_image(in_path, key=c))
 
+            # warp other images before second reference image if they exist
             ch_before_second_ref = []
             if first_ref + 1 == next_ref:
                 ch_before_second_ref = None
@@ -137,6 +140,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                 for c in range(first_ref + 1, next_ref):
                     ch_before_second_ref.append(warp_flow(read_image(in_path, key=c), flow))
 
+            # write images on disk
             if ch_before_first_ref is None and ch_before_second_ref is None:
                 TW_img.save(np.stack((im1, im2_warped), axis=0), photometric='minisblack', description=meta)
             elif ch_before_first_ref is not None and ch_before_second_ref is None:
@@ -153,6 +157,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
             im2 = read_image(in_path, key=next_ref)
             im2_warped, flow = reg_big_image(im1, im2, method='farneback')
 
+            # warp other images before reference image if they exist
             ch_before_next_ref = []
             if this_ref + 1 == next_ref:
                 ch_before_next_ref = None
@@ -160,6 +165,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                 for c in range(this_ref + 1, next_ref):
                     ch_before_next_ref.append(warp_flow(read_image(in_path, key=c), flow))
 
+            # write images on disk
             if ch_before_next_ref is None:
                 TW_img.save(im2_warped, photometric='minisblack', description=meta)
             else:
