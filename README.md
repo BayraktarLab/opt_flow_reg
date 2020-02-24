@@ -11,4 +11,4 @@ Currently limited to stack of maxz projections.
 **`-o`**  output directory
 
 ## Dependencies
-numpy tifffile opencv-contrib-python
+numpy tifffile opencv-contrib-python "dask[delayed]"
