@@ -41,7 +41,9 @@ def read_image(path: str, key: int):
 
 
 def reg_big_image(ref_img, moving_img, method='farneback'):
-    """ Calculates optical flow from moving_img to ref_img """
+    """ Calculates optical flow from moving_img to ref_img.
+        Image is divided into pieces to decrease memory consumption.
+    """
     n_pieces = 10
     row_pieces = ref_img.shape[0] // n_pieces
     warp_li = []
@@ -68,7 +70,7 @@ def reg_big_image(ref_img, moving_img, method='farneback'):
 
 def register(in_path: str, out_path: str, channels: dict):
     """ Read images and register them sequentially: 1<-2, 2<-3, 3<-4 etc. """
-    filename = os.path.basename(in_path).replace('.tif', 'opt_flow.tif')
+    filename = os.path.basename(in_path).replace('.tif', '_opt_flow.tif')
     ref_ch_ids = [i for i, c in enumerate(list(channels.values())) if c == 1]
     first_ref = ref_ch_ids[0]
 
@@ -150,9 +152,10 @@ def main():
 
     if not out_path.endswith('/'):
         out_path += '/'
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
 
     st = datetime.now()
-    #in_path = 'D:/image_data/out/test_auto/maxz_Hiplex_run1_cycle1_MsPos.tif'
 
     stack = tif.TiffFile(in_path, is_ome=True)
 
