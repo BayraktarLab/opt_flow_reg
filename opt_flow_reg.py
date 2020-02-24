@@ -25,8 +25,7 @@ def draw_hsv(flow):
 
 
 def warp_flow(img, flow):
-    """ Warps iput image according to optical flow """
-    # copy for dask
+    """ Warps input image according to optical flow """
     h, w = flow.shape[:2]
     xflow = -flow
     xflow[:, :, 0] += np.arange(w)
@@ -65,10 +64,11 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
         t = f + row_pieces
         if i == n_pieces - 1:
             t = ref_img.shape[0]
+        delayed_ref = dask.delayed(ref_img[f:t, :])
+        delayed_mov = dask.delayed(moving_img[f:t, :])
+        task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov))
 
-        task.append(dask.delayed(register_pieces)(ref_img[f:t, :], moving_img[f:t, :]))
-
-    warp_li, flow_li = dask.compute(*task, scheduler='processes')
+    warp_li, flow_li = dask.compute(*task, scheduler='processes', nout=2)
     """
     if method == 'farneback':
         flow = cv.calcOpticalFlowFarneback(moving_img[f:t, :], ref_img[f:t, :], None, pyr_scale=0.6, levels=5,
