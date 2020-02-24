@@ -70,7 +70,8 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
 
         task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov, f, t, i))
 
-    warp_li, flow_li = dask.compute(*task, scheduler='processes', nout=2, num_workers=2)
+    result = dask.compute(*task, scheduler='processes', num_workers=2)
+    warp_li, flow_li = result
     """
     if method == 'farneback':
         flow = cv.calcOpticalFlowFarneback(moving_img[f:t, :], ref_img[f:t, :], None, pyr_scale=0.6, levels=5,
