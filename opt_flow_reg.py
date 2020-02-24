@@ -37,7 +37,7 @@ def read_image(path: str, key: int):
     """ Read image and convert to uint8
         key - page number in tiff file
     """
-    return cv.normalize(tif.imread(path, key), None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
+    return cv.normalize(tif.imread(path, key=key), None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
 
 
 def reg_big_image(ref_img, moving_img, method='farneback'):
