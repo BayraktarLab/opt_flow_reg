@@ -59,6 +59,8 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
     # warp_li = []
     # flow_li = []
     task = []
+    delayed_ref = dask.delayed(ref_img)
+    delayed_mov = dask.delayed(moving_img)
     for i in range(0, n_pieces):
         #print(i)
         f = i * row_pieces
