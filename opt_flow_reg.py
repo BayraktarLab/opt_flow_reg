@@ -72,7 +72,7 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
 
         task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov, f, t))
 
-    flow_li = dask.compute(*task, scheduler='processes')
+    flow_li = dask.compute(*task, scheduler='processes', num_workers=3)
     print(len(flow_li), n_pieces)
     for i in range(0, n_pieces):
         f = i * row_pieces
