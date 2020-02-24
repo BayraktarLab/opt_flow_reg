@@ -48,7 +48,7 @@ def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray, f: int, t: int)
                                        flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
 
 
-def warp_pieces(moving_img: np.ndarray, flow: nd.array):
+def warp_pieces(moving_img: np.ndarray, flow: np.ndarray):
     return warp_flow(moving_img[f:t, :], flow)
 
 
@@ -83,7 +83,7 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
         if i == n_pieces - 1:
             t = ref_img.shape[0]
         reg_task.append(dask.delayed(register_pieces)(delayed_mov, flow_li[i], f, t))
-        
+
     warp_li = dask.compute(*warp_task, scheduler='processes', num_workers=2)
     """
     if method == 'farneback':
