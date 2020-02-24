@@ -26,12 +26,12 @@ def draw_hsv(flow):
 
 def warp_flow(img, flow):
     """ Warps iput image according to optical flow """
-    flow = np.copy(flow)    # copy for dask
+    # copy for dask
     h, w = flow.shape[:2]
-    flow = -flow
-    flow[:, :, 0] += np.arange(w)
-    flow[:, :, 1] += np.arange(h)[:, np.newaxis]
-    res = cv.remap(img, flow, None, cv.INTER_LINEAR)
+    xflow = -flow
+    xflow[:, :, 0] += np.arange(w)
+    xflow[:, :, 1] += np.arange(h)[:, np.newaxis]
+    res = cv.remap(img, xflow, None, cv.INTER_LINEAR)
     return res
 
 
@@ -47,7 +47,7 @@ def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray):
                                        winsize=21,
                                        iterations=3, poly_n=7, poly_sigma=1.3,
                                        flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
-    warped_img = warp_flow(moving_img[fro: to, :], flow)
+    warped_img = warp_flow(moving_img, flow)
     return warped_img, flow
 
 def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback'):
