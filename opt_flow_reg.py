@@ -71,9 +71,9 @@ def reg_big_image(ref_img, moving_img, method='farneback'):
 def register(in_path: str, out_path: str, channels: list, meta: str):
     """ Read images and register them sequentially: 1<-2, 2<-3, 3<-4 etc. """
     filename = os.path.basename(in_path).replace('.tif', '_opt_flow.tif')
-    print(channels)
+    # print(channels)
     ref_ch_ids = [i for i, c in enumerate(channels) if c == 1]
-    print(ref_ch_ids)
+    # print(ref_ch_ids)
     first_ref = ref_ch_ids[0]
 
     TW_img = tif.TiffWriter(out_path + filename, bigtiff=True)
@@ -82,10 +82,10 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
         next_ref = ref_ch_ids[i + 1]
         
         # first reference channel processed separately from other
-        if i == first_ref:
+        if this_ref == first_ref:
             print('Processing cycle', i)
             # warp channels
-            im1 = read_image(in_path, key=first_ref)
+            im1 = read_image(in_path, key=this_ref)
             im2 = read_image(in_path, key=next_ref)
             im2_warped, flow = reg_big_image(im1, im2, method='farneback')
 
