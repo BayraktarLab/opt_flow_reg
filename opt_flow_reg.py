@@ -71,7 +71,7 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
             t = ref_img.shape[0]
 
         reg_task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov, f, t))
-
+    print('registering pieces')
     flow_li = dask.compute(*reg_task, scheduler='processes', num_workers=2)
     del delayed_ref
 
@@ -82,9 +82,11 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
         t = f + row_pieces
         if i == n_pieces - 1:
             t = ref_img.shape[0]
-        reg_task.append(dask.delayed(register_pieces)(delayed_mov, flow_li[i], f, t))
+        warp_task.append(dask.delayed(register_pieces)(delayed_mov, flow_li[i], f, t))
 
+    print('warping pieces')
     warp_li = dask.compute(*warp_task, scheduler='processes', num_workers=2)
+    del delayed_mov
     """
     if method == 'farneback':
         flow = cv.calcOpticalFlowFarneback(moving_img[f:t, :], ref_img[f:t, :], None, pyr_scale=0.6, levels=5,
