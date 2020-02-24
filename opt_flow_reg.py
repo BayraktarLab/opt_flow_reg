@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 import tifffile as tif
 import cv2 as cv
-from dask import delayed
+import dask
 
 
 def draw_hsv(flow):
