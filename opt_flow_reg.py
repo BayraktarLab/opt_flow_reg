@@ -74,7 +74,10 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
         reg_task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov, f, t))
     print('registering pieces')
     res = dask.compute(*reg_task)
-    warp_li, flow_li = map(list, zip(*res))
+    for i in res:
+        warp_li.append(res[i][0])
+        flow_li.append(res[i][1])
+    #warp_li, flow_li = map(list, zip(*res))
 
     del delayed_ref, delayed_mov
     """
