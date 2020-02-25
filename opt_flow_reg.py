@@ -73,7 +73,7 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
 
         reg_task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov, f, t))
     print('registering pieces')
-    res = dask.compute(*reg_task, nout=2)
+    res = dask.compute(*reg_task)
     print(len(res))
     print(len(res[0]))
     print(len(res[1]))
