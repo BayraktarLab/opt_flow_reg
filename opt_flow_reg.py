@@ -34,15 +34,13 @@ def warp_flow(img, flow):
     return res
 
 
-def read_image(path: str, key: int):
-    """ Read image and convert to uint8
-        key - page number in tiff file
-    """
-    return cv.normalize(tif.imread(path, key=key), None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
+def convertu8(img):
+    return cv.normalize(img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
 
 
 def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray, f: int, t: int):
-    return cv.calcOpticalFlowFarneback(moving_img[f:t, :], ref_img[f:t, :], None, pyr_scale=0.6, levels=5,
+    return cv.calcOpticalFlowFarneback(convertu8(moving_img[f:t, :]), convertu8(ref_img[f:t, :]),
+                                       None, pyr_scale=0.6, levels=5,
                                        winsize=21,
                                        iterations=3, poly_n=7, poly_sigma=1.3,
                                        flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
@@ -72,7 +70,7 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
 
         reg_task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov, f, t))
     print('registering pieces')
-    flow_li = dask.compute(*reg_task, scheduler='processes', num_workers=2)
+    flow_li = dask.compute(*reg_task)
     del delayed_ref
 
     warp_task = []
@@ -85,7 +83,7 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
         warp_task.append(dask.delayed(warp_pieces)(delayed_mov, flow_li[i], f, t))
 
     print('warping pieces')
-    warp_li = dask.compute(*warp_task, scheduler='processes', num_workers=2)
+    warp_li = dask.compute(*warp_task)
     del delayed_mov
     """
     if method == 'farneback':
@@ -105,9 +103,8 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
 def register(in_path: str, out_path: str, channels: list, meta: str):
     """ Read images and register them sequentially: 1<-2, 2<-3, 3<-4 etc. """
     filename = os.path.basename(in_path).replace('.tif', '_opt_flow.tif')
-    # print(channels)
+
     ref_ch_ids = [i for i, c in enumerate(channels) if c == 1]
-    # print(ref_ch_ids)
     first_ref = ref_ch_ids[0]
 
     TW_img = tif.TiffWriter(out_path + filename, bigtiff=True)
@@ -118,8 +115,8 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
         
         # first reference channel processed separately from other
         if this_ref == first_ref:
-            im1 = read_image(in_path, key=this_ref)
-            im2 = read_image(in_path, key=next_ref)
+            im1 = tif.imread(in_path, key=this_ref)
+            im2 = tif.imread(in_path, key=next_ref)
             # register and warp 2nd ref image and get optical flow
             im2_warped, flow = reg_big_image(im1, im2, method='farneback')
             del im2
@@ -130,7 +127,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                 ch_before_first_ref = None
             else:
                 for c in range(0, first_ref):
-                    ch_before_first_ref.append(read_image(in_path, key=c))
+                    ch_before_first_ref.append(tif.imread(in_path, key=c))
 
             # warp other images before second reference image if they exist
             ch_before_second_ref = []
@@ -138,7 +135,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                 ch_before_second_ref = None
             else:
                 for c in range(first_ref + 1, next_ref):
-                    ch_before_second_ref.append(warp_flow(read_image(in_path, key=c), flow))
+                    ch_before_second_ref.append(warp_flow(tif.imread(in_path, key=c), flow))
 
             # write images on disk
             if ch_before_first_ref is None and ch_before_second_ref is None:
@@ -154,7 +151,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
             # TW_flow.save(flow[:,:,:], photometric='minisblack')
         else:
             im1 = im2_warped  # this_ref # reuse warped image from previous cycle
-            im2 = read_image(in_path, key=next_ref)
+            im2 = tif.imread(in_path, key=next_ref)
             im2_warped, flow = reg_big_image(im1, im2, method='farneback')
 
             # warp other images before reference image if they exist
@@ -163,7 +160,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                 ch_before_next_ref = None
             else:
                 for c in range(this_ref + 1, next_ref):
-                    ch_before_next_ref.append(warp_flow(read_image(in_path, key=c), flow))
+                    ch_before_next_ref.append(warp_flow(tif.imread(in_path, key=c), flow))
 
             # write images on disk
             if ch_before_next_ref is None:
@@ -184,17 +181,23 @@ def main():
     parser.add_argument('-i', type=str, required=True, help='image stack to register')
     parser.add_argument('-c', type=str, required=True, help='channel for registration')
     parser.add_argument('-o', type=str, required=True, help='output dir')
-
+    parser.add_argument('-n', type=int, default=2, help='number of processes to use, default 2')
     args = parser.parse_args()
 
     in_path = args.i
     ref_channel = args.c
     out_path = args.o
+    n_workers = args.n
 
     if not out_path.endswith('/'):
         out_path += '/'
     if not os.path.exists(out_path):
         os.makedirs(out_path)
+
+    if n_workers == 1:
+        dask.config.set({'scheduler': 'synchronous'})
+    else:
+        dask.config.set({'num_workers': n_workers, 'scheduler': 'processes'})
 
     st = datetime.now()
 
