@@ -186,7 +186,7 @@ def main():
     parser.add_argument('-i', type=str, required=True, help='image stack to register')
     parser.add_argument('-c', type=str, required=True, help='channel for registration')
     parser.add_argument('-o', type=str, required=True, help='output dir')
-    parser.add_argument('-n', type=int, default=2, help='multiprocessing: number of processes, default 2')
+    parser.add_argument('-n', type=int, default=1, help='multiprocessing: number of processes, default 1')
     args = parser.parse_args()
 
     in_path = args.i
