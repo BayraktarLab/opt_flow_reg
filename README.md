@@ -10,7 +10,7 @@ Currently limited to stack of maxz projections.
 
 **`-o`**  output directory
 
-**`-n`**  multiprocessing: number of processes, default 2
+**`-n`**  multiprocessing: number of processes, default 1
 
 ## Example usage
 
