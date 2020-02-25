@@ -10,5 +10,12 @@ Currently limited to stack of maxz projections.
 
 **`-o`**  output directory
 
+**`-n`**  multiprocessing: number of processes, default 2
+
+## Example usage
+
+**`python opt_flow_reg.py -i /path/to/iamge/stack/out.tif -c "Atto 490LS" -o /path/to/output/dir/ -n 3`**
+
+
 ## Dependencies
 numpy tifffile opencv-contrib-python "dask[delayed]"

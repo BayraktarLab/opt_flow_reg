@@ -46,7 +46,8 @@ def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray, f: int, t: int)
                                        flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
 
 
-def warp_pieces(moving_img: np.ndarray, flow: np.ndarray, f, t):
+def warp_pieces(moving_img: np.ndarray, flow: np.ndarray, f: int, t: int, i: int):
+    print(i)
     return warp_flow(moving_img[f:t, :], flow)
 
 
@@ -80,7 +81,7 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
         t = f + row_pieces  # to
         if i == n_pieces - 1:
             t = ref_img.shape[0]
-        warp_task.append(dask.delayed(warp_pieces)(delayed_mov, flow_li[i], f, t))
+        warp_task.append(dask.delayed(warp_pieces)(delayed_mov, flow_li[i], f, t, i))
 
     print('warping pieces')
     warp_li = dask.compute(*warp_task)
@@ -111,7 +112,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
     for i in range(0, len(ref_ch_ids) - 1):
         this_ref = ref_ch_ids[i]
         next_ref = ref_ch_ids[i + 1]
-        print('Processing cycle', i)
+        print('Processing cycle {0}/{1}'.format(i+1, len(ref_ch_ids)))
         
         # first reference channel processed separately from other
         if this_ref == first_ref:
@@ -181,7 +182,7 @@ def main():
     parser.add_argument('-i', type=str, required=True, help='image stack to register')
     parser.add_argument('-c', type=str, required=True, help='channel for registration')
     parser.add_argument('-o', type=str, required=True, help='output dir')
-    parser.add_argument('-n', type=int, default=2, help='number of processes to use, default 2')
+    parser.add_argument('-n', type=int, default=2, help='multiprocessing: number of processes, default 2')
     args = parser.parse_args()
 
     in_path = args.i
@@ -202,10 +203,10 @@ def main():
     st = datetime.now()
 
     stack = tif.TiffFile(in_path, is_ome=True)
-
-    # find selected reference channels
     ome = stack.ome_metadata
     stack.close()
+
+    # find selected reference channels in ome metadata
     matches = re.findall(r'Fluor=".*?"', ome)
     matches = [m.replace('Fluor=', '').replace('"', '') for m in matches]
     matches = [re.sub(r'c\d+\s+', '', m) for m in matches]  # remove cycle name
