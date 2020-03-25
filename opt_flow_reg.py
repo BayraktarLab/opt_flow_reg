@@ -3,14 +3,17 @@ import re
 import gc
 from datetime import datetime
 import argparse
+from typing import Tuple, List
 
 import numpy as np
 import tifffile as tif
 import cv2 as cv
 import dask
 
+Image = np.ndarray
 
-def draw_hsv(flow):
+
+def draw_hsv(flow: np.ndarray) -> Image:
     """ Can be used to visualize optical flow """
     h, w = flow.shape[:2]
     fx, fy = flow[:, :, 0], flow[:, :, 1]
@@ -24,7 +27,7 @@ def draw_hsv(flow):
     return bgr
 
 
-def warp_flow(img, flow):
+def warp_flow(img: Image, flow: np.ndarray) -> np.ndarray:
     """ Warps input image according to optical flow """
     h, w = flow.shape[:2]
     xflow = -flow
@@ -34,11 +37,11 @@ def warp_flow(img, flow):
     return res
 
 
-def convertu8(img):
+def convertu8(img: Image) -> Image:
     return cv.normalize(img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
 
 
-def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray, f: int, t: int):
+def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray, f: int, t: int) -> np.ndarray:
     return cv.calcOpticalFlowFarneback(convertu8(moving_img[f:t, :]), convertu8(ref_img[f:t, :]),
                                        None, pyr_scale=0.6, levels=5,
                                        winsize=21,
@@ -46,31 +49,76 @@ def register_pieces(ref_img: np.ndarray, moving_img: np.ndarray, f: int, t: int)
                                        flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
 
 
-def warp_pieces(moving_img: np.ndarray, flow: np.ndarray, f: int, t: int, i: int):
+def warp_pieces(moving_img: np.ndarray, flow: np.ndarray, f: int, t: int, i: int) -> Image:
     print(i)
     return warp_flow(moving_img[f:t, :], flow[f:t, :, :])
 
 
-def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback'):
+def assemble_from_pieces(pieces: List[Image], overlap: int) -> Image:
+    #total_overlap_size = overlap * (len(pieces) - 2)
+
+    x_shapes = []
+    y_shapes = []
+    for im in pieces:
+        y_shape, x_shape = im.shape
+        y_shapes.append(y_shape - overlap)
+        x_shapes.append(x_shape)
+
+    y_shapes[0] += overlap
+
+    y_pos = np.cumsum(y_shapes)
+    y_pos.insert(0, 0)
+
+    y_size = sum(y_shapes)
+    x_size = x_shapes[0]
+
+    big_image = np.zeros((y_size, x_size), dtype=pieces[0].dtype)
+
+    for i in range(0, len(pieces) - 1):
+        this_image = pieces[i]
+        next_image = pieces[i + 1]
+
+        f = y_pos[i]
+        t = y_pos[i + 1]
+
+        this_image[-overlap:, :] = np.mean((this_image[-overlap:, :], next_image[:overlap, :]), axis=0)
+        pieces[i + 1] = next_image[overlap:, :]
+        big_image[f:t, :] = this_image
+
+    big_image[y_pos[-1]:-1:, :] = pieces[-1]
+
+    return big_image
+
+
+def reg_big_image(ref_img: Image, moving_img: Image) -> Tuple[Image, np.ndarray]:
     """ Calculates optical flow from moving_img to ref_img.
         Image is divided into pieces to decrease memory consumption.
+        Currently working optical flow method is Farneback.
+        Other methods either to complex to work with or don't have proper API for Python.
     """
     n_pieces = 10
+    overlap = 20
     row_pieces = ref_img.shape[0] // n_pieces
     reg_task = []
     delayed_ref = dask.delayed(ref_img)
     delayed_mov = dask.delayed(moving_img)
     for i in range(0, n_pieces):
         #print(i)
-        f = i * row_pieces  # from
-        t = f + row_pieces  # to
-        if i == n_pieces - 1:
-            t = ref_img.shape[0]
+        if i == 0:
+            f = 0
+            t = row_pieces + overlap
+        elif i == n_pieces - 1:
+            f = (i * row_pieces) - overlap
+            t = -1
+        else:
+            f = (i * row_pieces) - overlap  # from
+            t = (f + row_pieces) + overlap  # to
 
         reg_task.append(dask.delayed(register_pieces)(delayed_ref, delayed_mov, f, t))
     print('registering pieces')
     flow_li = dask.compute(*reg_task)
-    flow_assembled = np.concatenate(flow_li, axis=0)
+    #flow_assembled = np.concatenate(flow_li, axis=0)
+    flow_assembled = assemble_from_pieces(flow_li, 20)
     del flow_li, reg_task
     gc.collect()
 
@@ -87,20 +135,8 @@ def reg_big_image(ref_img: np.ndarray, moving_img: np.ndarray, method='farneback
 
     print('warping pieces')
     warp_li = dask.compute(*warp_task)
-    del delayed_mov
+    del delayed_mov, delayed_ref
     img_assembled = np.concatenate(warp_li, axis=0)
-
-    """
-    if method == 'farneback':
-        flow = cv.calcOpticalFlowFarneback(moving_img[f:t, :], ref_img[f:t, :], None, pyr_scale=0.6, levels=5,
-                                           winsize=21,
-                                           iterations=3, poly_n=7, poly_sigma=1.3,
-                                           flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
-    warped = warp_flow(moving_img[f:t, :], flow)
-    
-    warp_li.append(warped)
-    flow_li.append(flow)
-    """
 
     return img_assembled, flow_assembled
 
@@ -232,8 +268,6 @@ def main():
 
     fin = datetime.now()
     print('time elapsed', fin - st)
-
-    # TW_flow = tif.TiffWriter('/home/ubuntu/test/iss2/registered/warped_stack_farneback_flow.tif', bigtiff=True)
 
 
 if __name__ == '__main__':
