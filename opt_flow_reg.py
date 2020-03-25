@@ -27,7 +27,7 @@ def draw_hsv(flow: np.ndarray) -> Image:
     return bgr
 
 
-def warp_flow(img: Image, flow: np.ndarray) -> np.ndarray:
+def warp_flow(img: Image, flow: np.ndarray) -> Image:
     """ Warps input image according to optical flow """
     h, w = flow.shape[:2]
     xflow = -flow
@@ -55,21 +55,19 @@ def warp_pieces(moving_img: np.ndarray, flow: np.ndarray, f: int, t: int, i: int
 
 
 def assemble_from_pieces(pieces: List[Image], overlap: int) -> Image:
-    #total_overlap_size = overlap * (len(pieces) - 2)
+    #total_overlap_size = overlap  * (len(pieces) * 2 - 2)
 
     x_shapes = []
     y_shapes = []
     for im in pieces:
-        print(im.shape)
         y_shape, x_shape, c_shape = im.shape
         y_shapes.append(y_shape - overlap)
         x_shapes.append(x_shape)
-
+    
     y_shapes[0] += overlap
-
-    y_pos = np.cumsum(y_shapes)
+    
+    y_pos = list(np.cumsum(y_shapes))
     y_pos.insert(0, 0)
-
     y_size = sum(y_shapes)
     x_size = x_shapes[0]
 
@@ -82,12 +80,12 @@ def assemble_from_pieces(pieces: List[Image], overlap: int) -> Image:
         f = y_pos[i]
         t = y_pos[i + 1]
 
-        this_image[-overlap:, :, :] = np.mean((this_image[-overlap:, :, :], next_image[overlap, :, :]), axis=0)
+        this_image[-overlap:, :, :] = np.mean((this_image[-overlap:, :, :], next_image[:overlap, :, :]), axis=0)
         pieces[i + 1] = next_image[overlap:, :, :]
         big_image[f:t, :, :] = this_image
 
-    big_image[y_pos[-1]:-1:, :, :] = pieces[-1]
-
+    big_image[y_pos[-2]:y_pos[-1]:, :, :] = pieces[-1]
+    
     return big_image
 
 
@@ -97,20 +95,21 @@ def reg_big_image(ref_img: Image, moving_img: Image) -> Tuple[Image, np.ndarray]
         Currently working optical flow method is Farneback.
         Other methods either to complex to work with or don't have proper API for Python.
     """
+
     n_pieces = 10
     overlap = 20
     row_pieces = ref_img.shape[0] // n_pieces
     reg_task = []
     delayed_ref = dask.delayed(ref_img)
     delayed_mov = dask.delayed(moving_img)
+    
     for i in range(0, n_pieces):
-        #print(i)
         if i == 0:
             f = 0
-            t = row_pieces + overlap
+            t = row_pieces
         elif i == n_pieces - 1:
             f = (i * row_pieces) - overlap
-            t = -1
+            t = ref_img.shape[0]
         else:
             f = (i * row_pieces) - overlap  # from
             t = (f + row_pieces) + overlap  # to
@@ -123,23 +122,8 @@ def reg_big_image(ref_img: Image, moving_img: Image) -> Tuple[Image, np.ndarray]
     del flow_li, reg_task
     gc.collect()
 
-    warp_task = []
-    #delayed_flow = dask.delayed(flow_assembled)
-    for i in range(0, n_pieces):
-        # print(i)
-        f = i * row_pieces  # from
-        t = f + row_pieces  # to
-        if i == n_pieces - 1:
-            t = ref_img.shape[0]
-
-        warp_task.append(dask.delayed(warp_pieces)(moving_img, flow_assembled, f, t, i))
-
-    print('warping pieces')
-    warp_li = dask.compute(*warp_task)
-    del delayed_mov, delayed_ref
-    img_assembled = np.concatenate(warp_li, axis=0)
-
-    return img_assembled, flow_assembled
+    img_warped = warp_flow(moving_img, flow_assembled)
+    return img_warped, flow_assembled
 
 
 def register(in_path: str, out_path: str, channels: list, meta: str):
