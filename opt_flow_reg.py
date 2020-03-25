@@ -60,7 +60,8 @@ def assemble_from_pieces(pieces: List[Image], overlap: int) -> Image:
     x_shapes = []
     y_shapes = []
     for im in pieces:
-        y_shape, x_shape = im.shape
+        print(im.shape)
+        y_shape, x_shape, c_shape = im.shape
         y_shapes.append(y_shape - overlap)
         x_shapes.append(x_shape)
 
@@ -72,7 +73,7 @@ def assemble_from_pieces(pieces: List[Image], overlap: int) -> Image:
     y_size = sum(y_shapes)
     x_size = x_shapes[0]
 
-    big_image = np.zeros((y_size, x_size), dtype=pieces[0].dtype)
+    big_image = np.zeros((y_size, x_size, c_shape), dtype=pieces[0].dtype)
 
     for i in range(0, len(pieces) - 1):
         this_image = pieces[i]
@@ -81,11 +82,11 @@ def assemble_from_pieces(pieces: List[Image], overlap: int) -> Image:
         f = y_pos[i]
         t = y_pos[i + 1]
 
-        this_image[-overlap:, :] = np.mean((this_image[-overlap:, :], next_image[:overlap, :]), axis=0)
-        pieces[i + 1] = next_image[overlap:, :]
-        big_image[f:t, :] = this_image
+        this_image[-overlap:, :, :] = np.mean((this_image[-overlap:, :, :], next_image[overlap, :, :]), axis=0)
+        pieces[i + 1] = next_image[overlap:, :, :]
+        big_image[f:t, :, :] = this_image
 
-    big_image[y_pos[-1]:-1:, :] = pieces[-1]
+    big_image[y_pos[-1]:-1:, :, :] = pieces[-1]
 
     return big_image
 
@@ -118,7 +119,7 @@ def reg_big_image(ref_img: Image, moving_img: Image) -> Tuple[Image, np.ndarray]
     print('registering pieces')
     flow_li = dask.compute(*reg_task)
     #flow_assembled = np.concatenate(flow_li, axis=0)
-    flow_assembled = assemble_from_pieces(flow_li, 20)
+    flow_assembled = assemble_from_pieces(list(flow_li), 20)
     del flow_li, reg_task
     gc.collect()
 
@@ -159,7 +160,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
             im1 = tif.imread(in_path, key=this_ref)
             im2 = tif.imread(in_path, key=next_ref)
             # register and warp 2nd ref image and get optical flow
-            im2_warped, flow = reg_big_image(im1, im2, method='farneback')
+            im2_warped, flow = reg_big_image(im1, im2)
             del im2
 
             # collect images before first reference image if they exist
@@ -193,7 +194,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
         else:
             im1 = im2_warped  # this_ref # reuse warped image from previous cycle
             im2 = tif.imread(in_path, key=next_ref)
-            im2_warped, flow = reg_big_image(im1, im2, method='farneback')
+            im2_warped, flow = reg_big_image(im1, im2)
 
             # warp other images before reference image if they exist
             ch_before_next_ref = []
