@@ -131,70 +131,64 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
     filename = os.path.basename(in_path).replace('.tif', '_opt_flow.tif')
 
     ref_ch_ids = [i for i, c in enumerate(channels) if c == 1]
-    first_ref = ref_ch_ids[0]
+    first_ref_id = ref_ch_ids[0]
 
     TW_img = tif.TiffWriter(out_path + filename, bigtiff=True)
     for i in range(0, len(ref_ch_ids) - 1):
-        this_ref = ref_ch_ids[i]
-        next_ref = ref_ch_ids[i + 1]
+        this_ref_id = ref_ch_ids[i]
+        next_ref_id = ref_ch_ids[i + 1]
         print('Processing cycle {0}/{1}'.format(i+1, len(ref_ch_ids)))
         
         # first reference channel processed separately from other
-        if this_ref == first_ref:
-            im1 = tif.imread(in_path, key=this_ref)
-            im2 = tif.imread(in_path, key=next_ref)
+        if this_ref_id == first_ref_id:
+            im1 = tif.imread(in_path, key=this_ref_id)
+            im2 = tif.imread(in_path, key=next_ref_id)
             # register and warp 2nd ref image and get optical flow
             im2_warped, flow = reg_big_image(im1, im2)
             del im2
 
-            # collect images before first reference image if they exist
-            ch_before_first_ref = []
-            if first_ref == 0:
-                ch_before_first_ref = None
+            # collect images before first reference image if they exist and write to disk
+            if first_ref_id == 0:
+                TW_img.save(im1, photometric='minisblack', description=meta)
             else:
-                for c in range(0, first_ref):
-                    ch_before_first_ref.append(tif.imread(in_path, key=c))
+                for c in range(0, first_ref_id):
+                    TW_img.save(tif.imread(in_path, key=c), photometric='minisblack', description=meta)
 
             # warp other images before second reference image if they exist
-            ch_before_second_ref = []
-            if first_ref + 1 == next_ref:
-                ch_before_second_ref = None
-            else:
-                for c in range(first_ref + 1, next_ref):
-                    ch_before_second_ref.append(warp_flow(tif.imread(in_path, key=c), flow))
-
-            # write images on disk
-            if ch_before_first_ref is None and ch_before_second_ref is None:
-                TW_img.save(np.stack((im1, im2_warped), axis=0), photometric='minisblack', description=meta)
-            elif ch_before_first_ref is not None and ch_before_second_ref is None:
-                TW_img.save(np.stack((*ch_before_first_ref, im1, im2_warped), axis=0), photometric='minisblack', description=meta)
-            elif ch_before_first_ref is None and ch_before_second_ref is not None:
-                TW_img.save(np.stack((im1, *ch_before_second_ref, im2_warped), axis=0), photometric='minisblack', description=meta)
-            else:
-                TW_img.save(np.stack((*ch_before_first_ref, im1, *ch_before_second_ref, im2_warped), axis=0), photometric='minisblack', description=meta)
-
-            gc.collect()
-            # TW_flow.save(flow[:,:,:], photometric='minisblack')
-        else:
-            im1 = im2_warped  # this_ref # reuse warped image from previous cycle
-            im2 = tif.imread(in_path, key=next_ref)
-            im2_warped, flow = reg_big_image(im1, im2)
-
-            # warp other images before reference image if they exist
-            ch_before_next_ref = []
-            if this_ref + 1 == next_ref:
-                ch_before_next_ref = None
-            else:
-                for c in range(this_ref + 1, next_ref):
-                    ch_before_next_ref.append(warp_flow(tif.imread(in_path, key=c), flow))
-
-            # write images on disk
-            if ch_before_next_ref is None:
+            # check if images after first ref exist
+            if first_ref_id + 1 == next_ref_id:
                 TW_img.save(im2_warped, photometric='minisblack', description=meta)
             else:
-                TW_img.save(np.stack((*ch_before_next_ref, im2_warped), axis=0), photometric='minisblack', description=meta)
+                for c in range(first_ref_id + 1, next_ref_id):
+                    TW_img.save(warp_flow(tif.imread(in_path, key=c), flow),  photometric='minisblack', description=meta)
+                TW_img.save(im2_warped, photometric='minisblack', description=meta)
 
+            gc.collect()
+
+        else:
+            im1 = im2_warped  # this_ref_id # reuse warped image from previous cycle
+            im2 = tif.imread(in_path, key=next_ref_id)
+            im2_warped, flow = reg_big_image(im1, im2)
             del im2
+
+            # warp other images before next reference image if they exist and write to disk
+
+            # check if images after this ref exist
+            if this_ref_id + 1 == next_ref_id:
+                TW_img.save(im2_warped, photometric='minisblack', description=meta)
+            else:
+                for c in range(this_ref_id + 1, next_ref_id):
+                    TW_img.save(warp_flow(tif.imread(in_path, key=c), flow), photometric='minisblack', description=meta)
+                TW_img.save(im2_warped, photometric='minisblack', description=meta)
+
+            # write rest of the channels after last reference channel
+            if next_ref_id == len(ref_ch_ids) - 1:
+                if len(channels) == len(ref_ch_ids):
+                    pass
+                else:
+                    for c in range(next_ref_id, len(channels)):
+                        TW_img.save(warp_flow(tif.imread(in_path, key=c), flow),  photometric='minisblack', description=meta)
+
             gc.collect()
             # TW_flow.save(flow[:,:,:], photometric='minisblack')
 
