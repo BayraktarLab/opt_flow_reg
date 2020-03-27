@@ -144,7 +144,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
     for i in range(0, len(ref_ch_ids) - 1):
         this_ref_id = ref_ch_ids[i]
         next_ref_id = ref_ch_ids[i + 1]
-        print('{0} Processing cycle {1}/{2}'.format(str(datetime.now()), i+2, len(ref_ch_ids)))
+        print('\n{0} Processing cycle {1}/{2}'.format(str(datetime.now()), i+2, len(ref_ch_ids)))
         
         # first reference channel processed separately from other
         if this_ref_id == first_ref_id:
@@ -160,6 +160,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                     TW_img.save(tif.imread(in_path, key=c), photometric='minisblack', description=meta)
 
             TW_img.save(im1, photometric='minisblack', description=meta)
+            del im1
 
             # if there are other channels after first ref channel warp and write them
             if first_ref_id + 1 != next_ref_id:
@@ -179,6 +180,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                 for c in range(next_ref_id,  ref_ch_ids[i + 2] - channels_before_ref_id):
                     TW_img.save(warp_flow(tif.imread(in_path, key=c), flow),  photometric='minisblack', description=meta)
 
+            del flow
             gc.collect()
 
         else:
@@ -194,9 +196,9 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
             TW_img.save(im2_warped, photometric='minisblack', description=meta)
 
             # if there are other channels after second ref channel warp and write them
-            if next_ref_id == len(ref_ch_ids) - 1:
+            if next_ref_id == ref_ch_ids[-1]:
                 # if this is the last reference channel
-                if len(channels) == len(ref_ch_ids):
+                if next_ref_id == len(channels) - 1:
                     # if this is last channel at all
                     pass
                 else:
@@ -207,6 +209,7 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
                     for c in range(next_ref_id, ref_ch_ids[i + 2] - channels_before_ref_id):
                         TW_img.save(warp_flow(tif.imread(in_path, key=c), flow), photometric='minisblack', description=meta)
 
+            del flow
             gc.collect()
             # TW_flow.save(flow[:,:,:], photometric='minisblack')
 
