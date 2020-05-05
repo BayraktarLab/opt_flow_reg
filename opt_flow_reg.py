@@ -126,24 +126,51 @@ def reg_big_image(ref_img: Image, moving_img: Image) -> Tuple[Image, np.ndarray]
     return img_warped, flow_assembled
 
 
-def register(in_path: str, out_path: str, channels: list, meta: str):
+def channel_saving_first_cycle(writer, image, ref_position_in_cycle, cycle_size, cycle_number, in_path, meta):
+    if ref_position_in_cycle != 0:
+        for c in range(0, ref_position_in_cycle):
+            key = cycle_number * cycle_size + c
+            writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
+
+    writer.save(image, photometric='minisblack', description=meta)
+    del image
+
+    # if there are other channels after first ref channel warp and write them
+    if ref_position_in_cycle != cycle_size - 1:
+        for c in range(ref_position_in_cycle, cycle_size):
+            key = cycle_number * cycle_size + c
+            writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
+
+
+def channel_saving(writer, image, flow, ref_position_in_cycle, cycle_size, cycle_number, in_path, meta):
+    if ref_position_in_cycle != 0:
+        for c in range(0, ref_position_in_cycle):
+            key = cycle_number * cycle_size + c
+            writer.save(warp_flow(tif.imread(in_path, key=key), flow), photometric='minisblack', description=meta)
+
+    writer.save(image, photometric='minisblack', description=meta)
+    del image
+
+    # if there are other channels after first ref channel warp and write them
+    if ref_position_in_cycle != cycle_size - 1:
+        for c in range(ref_position_in_cycle, cycle_size):
+            key = cycle_number * cycle_size + c
+            writer.save(warp_flow(tif.imread(in_path, key=key), flow), photometric='minisblack', description=meta)
+
+
+
+def register(in_path: str, out_path: str, cycle_size: int, ncycles: int, ref_position_in_cycle: int, meta: str):
     """ Read images and register them sequentially: 1<-2, 2<-3, 3<-4 etc.
         It is assumed that there is equal number of channels in each cycle.
     """
-    filename = os.path.basename(in_path).replace('.tif', '_opt_flow.tif')
+    filename = os.path.basename(in_path).replace('.tif', '_opt_flow_registered.tif')
 
-    ref_ch_ids = [i for i, c in enumerate(channels) if c == 1]
-    first_ref_id = ref_ch_ids[0]
-
-    if first_ref_id != 0:
-        channels_before_ref_id = first_ref_id
-    else:
-        channels_before_ref_id = 0
+    first_ref_id = ref_position_in_cycle
 
     TW_img = tif.TiffWriter(out_path + filename, bigtiff=True)
-    for i in range(0, len(ref_ch_ids) - 1):
-        this_ref_id = ref_ch_ids[i]
-        next_ref_id = ref_ch_ids[i + 1]
+    for i in range(0, ncycles):
+        this_ref_id = cycle_size * i + ref_position_in_cycle
+        next_ref_id = cycle_size * (i + 1) + ref_position_in_cycle
         print('\n{0} Processing cycle {1}/{2}'.format(str(datetime.now()), i+2, len(ref_ch_ids)))
         
         # first reference channel processed separately from other
@@ -154,31 +181,9 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
             im2_warped, flow = reg_big_image(im1, im2)
             del im2
             print('writing to file')
-            # collect images before first reference image if they exist and write to disk
-            if channels_before_ref_id != 0:
-                for c in range(0, first_ref_id):
-                    TW_img.save(tif.imread(in_path, key=c), photometric='minisblack', description=meta)
 
-            TW_img.save(im1, photometric='minisblack', description=meta)
-            del im1
-
-            # if there are other channels after first ref channel warp and write them
-            if first_ref_id + 1 != next_ref_id:
-                for c in range(first_ref_id + 1, next_ref_id - channels_before_ref_id):
-                    TW_img.save(tif.imread(in_path, key=c), photometric='minisblack', description=meta)
-
-            # warp other images before second reference image if they exist
-            # check if images after first ref exist
-            if channels_before_ref_id != 0:
-                for c in range(next_ref_id - channels_before_ref_id, next_ref_id):
-                    TW_img.save(warp_flow(tif.imread(in_path, key=c), flow), photometric='minisblack', description=meta)
-
-            TW_img.save(im2_warped, photometric='minisblack', description=meta)
-
-            # if there are other channels after second ref channel warp and write them
-            if next_ref_id + 1 != ref_ch_ids[i + 2]:
-                for c in range(next_ref_id,  ref_ch_ids[i + 2] - channels_before_ref_id):
-                    TW_img.save(warp_flow(tif.imread(in_path, key=c), flow),  photometric='minisblack', description=meta)
+            channel_saving_first_cycle(TW_img, im1, ref_position_in_cycle, cycle_size, i, in_path, meta)
+            channel_saving(TW_img, im2_warped, flow, ref_position_in_cycle, cycle_size, i, in_path, meta)
 
             del flow
             gc.collect()
@@ -189,32 +194,12 @@ def register(in_path: str, out_path: str, channels: list, meta: str):
             im2_warped, flow = reg_big_image(im1, im2)
             del im2
             print('writing to file')
-            if channels_before_ref_id != 0:
-                for c in range(next_ref_id - channels_before_ref_id, next_ref_id):
-                    TW_img.save(warp_flow(tif.imread(in_path, key=c), flow), photometric='minisblack', description=meta)
-
-            TW_img.save(im2_warped, photometric='minisblack', description=meta)
-
-            # if there are other channels after second ref channel warp and write them
-            if next_ref_id == ref_ch_ids[-1]:
-                # if this is the last reference channel
-                if next_ref_id == len(channels) - 1:
-                    # if this is last channel at all
-                    pass
-                else:
-                    for c in range(next_ref_id, len(channels)):
-                        TW_img.save(warp_flow(tif.imread(in_path, key=c), flow), photometric='minisblack', description=meta)
-            else:
-                if next_ref_id + 1 != ref_ch_ids[i + 2]:
-                    for c in range(next_ref_id, ref_ch_ids[i + 2] - channels_before_ref_id):
-                        TW_img.save(warp_flow(tif.imread(in_path, key=c), flow), photometric='minisblack', description=meta)
+            channel_saving(TW_img, im2_warped, flow, ref_position_in_cycle, cycle_size, i, in_path, meta)
 
             del flow
             gc.collect()
-            # TW_flow.save(flow[:,:,:], photometric='minisblack')
 
     TW_img.close()
-    # TW_flow.close()
 
 
 def main():
@@ -252,19 +237,37 @@ def main():
     matches = [re.sub(r'c\d+\s+', '', m) for m in matches]  # remove cycle name
 
     # encode reference channels as 1 other 0
+
     channels = []
     for i, channel in enumerate(matches):
         if channel == ref_channel:
             channels.append(1)
         else:
             channels.append(0)
-    
+
+    cycle_composition = []
+    for ch in channels:
+        cycle_composition.append(ch)
+        if sum(cycle_composition) == 2:
+            break
+
+    first_ref_position = cycle_composition.index(1)
+    for i, position in enumerate(cycle_composition):
+        if cycle_composition[i] == 1 and cycle_composition[i] != first_ref_position:
+            second_ref_position = i
+        else:
+            raise ValueError('Reference channel in second cycle is not found')
+
+    cycle_size = second_ref_position - first_ref_position
+    ncycles = len(channels) // cycle_size
+
+
     # check if reference channel is available
     if ref_channel not in matches:
         raise ValueError('Incorrect reference channel. Available reference channels ' + ', '.join(set(matches)))
 
     # perform registration of full stack
-    register(in_path, out_path, channels, ome)
+    register(in_path, out_path, cycle_size, ncycles, first_ref_position, ome)
 
     fin = datetime.now()
     print('time elapsed', fin - st)
