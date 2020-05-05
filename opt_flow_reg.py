@@ -137,7 +137,7 @@ def channel_saving_first_cycle(writer, image, ref_position_in_cycle, cycle_size,
 
     # if there are other channels after first ref channel warp and write them
     if ref_position_in_cycle != cycle_size - 1:
-        for c in range(ref_position_in_cycle, cycle_size):
+        for c in range(ref_position_in_cycle + 1, cycle_size):
             key = cycle_number * cycle_size + c
             writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
 
@@ -153,7 +153,7 @@ def channel_saving(writer, image, flow, ref_position_in_cycle, cycle_size, cycle
 
     # if there are other channels after first ref channel warp and write them
     if ref_position_in_cycle != cycle_size - 1:
-        for c in range(ref_position_in_cycle, cycle_size):
+        for c in range(ref_position_in_cycle + 1, cycle_size):
             key = cycle_number * cycle_size + c
             writer.save(warp_flow(tif.imread(in_path, key=key), flow), photometric='minisblack', description=meta)
 
@@ -168,10 +168,10 @@ def register(in_path: str, out_path: str, cycle_size: int, ncycles: int, ref_pos
     first_ref_id = ref_position_in_cycle
 
     TW_img = tif.TiffWriter(out_path + filename, bigtiff=True)
-    for i in range(0, ncycles):
+    for i in range(0, ncycles-1):
         this_ref_id = cycle_size * i + ref_position_in_cycle
         next_ref_id = cycle_size * (i + 1) + ref_position_in_cycle
-        print('\n{0} Processing cycle {1}/{2}'.format(str(datetime.now()), i+2, len(ref_ch_ids)))
+        print('\n{time} Processing cycle {this_cycle}/{total_cycles}'.format(time=str(datetime.now()), this_cycle=i+2, total_cycles=ncycles))
         
         # first reference channel processed separately from other
         if this_ref_id == first_ref_id:
@@ -183,7 +183,7 @@ def register(in_path: str, out_path: str, cycle_size: int, ncycles: int, ref_pos
             print('writing to file')
 
             channel_saving_first_cycle(TW_img, im1, ref_position_in_cycle, cycle_size, i, in_path, meta)
-            channel_saving(TW_img, im2_warped, flow, ref_position_in_cycle, cycle_size, i, in_path, meta)
+            channel_saving(TW_img, im2_warped, flow, ref_position_in_cycle, cycle_size, i+1, in_path, meta)
 
             del flow
             gc.collect()
@@ -194,7 +194,7 @@ def register(in_path: str, out_path: str, cycle_size: int, ncycles: int, ref_pos
             im2_warped, flow = reg_big_image(im1, im2)
             del im2
             print('writing to file')
-            channel_saving(TW_img, im2_warped, flow, ref_position_in_cycle, cycle_size, i, in_path, meta)
+            channel_saving(TW_img, im2_warped, flow, ref_position_in_cycle, cycle_size, i+1, in_path, meta)
 
             del flow
             gc.collect()
@@ -252,11 +252,14 @@ def main():
             break
 
     first_ref_position = cycle_composition.index(1)
+    second_ref_position = None
     for i, position in enumerate(cycle_composition):
         if cycle_composition[i] == 1 and cycle_composition[i] != first_ref_position:
             second_ref_position = i
-        else:
-            raise ValueError('Reference channel in second cycle is not found')
+         
+
+    if second_ref_position is None:
+        raise ValueError('Reference channel in second cycle is not found')
 
     cycle_size = second_ref_position - first_ref_position
     ncycles = len(channels) // cycle_size
