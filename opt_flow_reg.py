@@ -51,7 +51,7 @@ def reg_big_image(ref_img: Image, moving_img: Image, warper) -> Tuple[Image, Lis
     print(datetime.now(), 'registering reference channel tiles')
     flow_tiles = dask.compute(*reg_task)
     flow_tiles = list(flow_tiles)
-    print(datetime.now(), 'registered')
+
     del ref_img_tiles, ref_img_slice_info
 
     print(datetime.now(), 'warping reference channel tiles')
@@ -59,7 +59,7 @@ def reg_big_image(ref_img: Image, moving_img: Image, warper) -> Tuple[Image, Lis
     warper.slicer_info = moving_image_slice_info
     warper.flow_tiles = flow_tiles
     warped_moving_image = warper.warp()
-    print(datetime.now(), 'warped')
+
     return warped_moving_image, flow_tiles
 
 
@@ -122,7 +122,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
             # register and warp 2nd ref image and get optical flow
             im2_warped, flow = reg_big_image(im1, im2, warper)
             del im2
-            print(datetime.now(), 'writing to file')
+            print(datetime.now(), 'warping and writing to file the rest of the channels')
 
             channel_saving_first_cycle(TW_img, im1, ref_position_in_cycle, cycle_size, i, in_path, meta)
             channel_saving(TW_img, warper, im2_warped, flow, ref_position_in_cycle, cycle_size, i+1, in_path, meta)
@@ -135,7 +135,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
             im2 = tif.imread(in_path, key=next_ref_id)
             im2_warped, flow = reg_big_image(im1, im2, warper)
             del im2
-            print(datetime.now(), 'writing to file')
+            print(datetime.now(), 'warping and writing to file the rest of the channels')
             channel_saving(TW_img, warper, im2_warped, flow, ref_position_in_cycle, cycle_size, i+1, in_path, meta)
 
             del flow

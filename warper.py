@@ -20,7 +20,6 @@ class Warper:
 
 
     def warp(self):
-        print('warping 0')
         if self.image is not None:
             self.image_tiles, self.slicer_info = split_image_into_blocks_of_size(self.image, self.block_w, self.block_h, self.overlap)
             self.image = None  # cleanup
