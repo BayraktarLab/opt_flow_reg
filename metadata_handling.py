@@ -35,15 +35,21 @@ def find_where_ref_channel(ome_meta: str, ref_channel: str):
         if ref_channel in fluors:
             found_ref_channel = True
             matches = fluors
-    else:
-        names = [re.sub(r'^c\d+\s+', '', name) for name in channel_names]
-        if ref_channel in names:
-            found_ref_channel = True
-            matches = names
+
+    names = [re.sub(r'^c\d+\s+', '', name) for name in channel_names]
+    if ref_channel in names:
+        found_ref_channel = True
+        matches = names
 
     # check if reference channel is available
     if not found_ref_channel:
-        raise ValueError('Incorrect reference channel. Available channels ' + ', '.join(set(matches)))
+
+        if channel_fluors != []:
+            message = 'Incorrect reference channel. Available channel names: {names}, fluors: {fluors}'
+            raise ValueError(message.format(names=', '.join(set(names)), fluors=', '.join(set(fluors))))
+        else:
+            message = 'Incorrect reference channel. Available channel names: {names}'
+            raise ValueError(message.format(names=', '.join(set(names))))
 
     return matches
 
