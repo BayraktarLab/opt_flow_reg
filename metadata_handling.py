@@ -29,22 +29,21 @@ def find_where_ref_channel(ome_meta: str, ref_channel: str):
     """ Find if reference channel is in fluorophores or channel names and return them"""
 
     channels, channel_names, channel_ids, channel_fluors = extract_channel_info(str_to_xml(ome_meta))
-    found_ref_channel = False
+
+    # strip cycle id from channel name and fluor name
     if channel_fluors != []:
         fluors = [re.sub(r'^c\d+\s+', '', fluor) for fluor in channel_fluors]  # remove cycle name
-        if ref_channel in fluors:
-            found_ref_channel = True
-            matches = fluors
-
+    else:
+        fluors = None
     names = [re.sub(r'^c\d+\s+', '', name) for name in channel_names]
+
+    # check if reference channel is present somewhere
     if ref_channel in names:
-        found_ref_channel = True
         matches = names
-
-    # check if reference channel is available
-    if not found_ref_channel:
-
-        if channel_fluors != []:
+    elif fluors is not None and ref_channel in fluors:
+        matches = fluors
+    else:
+        if fluors is not None:
             message = 'Incorrect reference channel. Available channel names: {names}, fluors: {fluors}'
             raise ValueError(message.format(names=', '.join(set(names)), fluors=', '.join(set(fluors))))
         else:
