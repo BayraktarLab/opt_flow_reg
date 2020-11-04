@@ -45,8 +45,8 @@ def stitch_image(img_list: List[Image], slicer_info) -> Image:
     x_axis = -1
     y_axis = -2
 
-    block_x_size = block_shape[x_axis] - overlap * 2
-    block_y_size = block_shape[y_axis] - overlap * 2
+    block_x_size = block_shape[x_axis]
+    block_y_size = block_shape[y_axis]
 
     big_image_x_size = (x_nblocks * block_x_size) - padding["left"] - padding["right"]
     big_image_y_size = (y_nblocks * block_y_size) - padding["top"] - padding["bottom"]
