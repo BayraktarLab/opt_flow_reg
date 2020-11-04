@@ -1,5 +1,3 @@
-import copy
-
 import numpy as np
 
 Image = np.ndarray
@@ -55,7 +53,6 @@ def split_image_into_blocks_of_size(arr: np.ndarray, block_w: int, block_h: int,
     y_nblocks = arr_height // block_h if arr_height % block_h == 0 else (arr_height // block_h) + 1
 
     blocks = []
-    img_names = []
 
     # row
     for i in range(0, y_nblocks):
@@ -81,7 +78,7 @@ def split_image_into_blocks_of_size(arr: np.ndarray, block_w: int, block_h: int,
 
     info = dict(block_shape=block_shape, nblocks=nblocks, overlap=overlap, padding=padding)
 
-    return blocks, img_names
+    return blocks, info
 
 
 def split_by_nblocks(arr: Image, x_nblocks: int, y_nblocks: int, overlap: int):
