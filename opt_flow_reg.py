@@ -32,15 +32,13 @@ def register_tiles(ref_img: np.ndarray, moving_img: np.ndarray) -> np.ndarray:
                                        flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
 
 
-def reg_big_image(ref_img: Image, moving_img: Image, warper) -> Tuple[Image, List[np.ndarray]]:
+def reg_big_image(ref_img: Image, moving_img: Image, warper, block_width, block_height, overlap) -> Tuple[Image, List[np.ndarray]]:
     """ Calculates optical flow from moving_img to ref_img.
         Image is divided into pieces to decrease memory consumption.
         Currently working optical flow method is Farneback.
         Other methods either to complex to work with or don't have proper API for Python.
     """
-    block_width = 1000
-    block_height = 1000
-    overlap = 50
+
     ref_img_tiles, ref_img_slice_info = split_image_into_blocks_of_size(ref_img, block_width, block_height, overlap)
     moving_img_tiles, moving_image_slice_info = split_image_into_blocks_of_size(moving_img, block_width, block_height, overlap)
 
@@ -101,7 +99,7 @@ def channel_saving(writer, warper, image, flow_tiles, ref_position_in_cycle, cyc
             writer.save(warped_image, photometric='minisblack', description=meta)
 
 
-def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_position_in_cycle: int, meta: str, warper):
+def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_position_in_cycle: int, meta: str, warper, block_width, block_height, overlap):
     """ Read images and register them sequentially: 1<-2, 2<-3, 3<-4 etc.
         It is assumed that there is equal number of channels in each cycle.
     """
@@ -120,7 +118,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
             im1 = tif.imread(in_path, key=this_ref_id)
             im2 = tif.imread(in_path, key=next_ref_id)
             # register and warp 2nd ref image and get optical flow
-            im2_warped, flow = reg_big_image(im1, im2, warper)
+            im2_warped, flow = reg_big_image(im1, im2, warper, block_width, block_height, overlap)
             del im2
             print(datetime.now(), 'warping and writing to file the rest of the channels')
 
@@ -133,7 +131,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
         else:
             im1 = im2_warped  # this_ref_id # reuse warped image from previous cycle
             im2 = tif.imread(in_path, key=next_ref_id)
-            im2_warped, flow = reg_big_image(im1, im2, warper)
+            im2_warped, flow = reg_big_image(im1, im2, warper, block_width, block_height, overlap)
             del im2
             print(datetime.now(), 'warping and writing to file the rest of the channels')
             channel_saving(TW_img, warper, im2_warped, flow, ref_position_in_cycle, cycle_size, i+1, in_path, meta)
@@ -144,7 +142,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
     TW_img.close()
 
 
-def main(in_path: str, ref_channel: str, out_dir: str, n_workers: int):
+def main(in_path: str, ref_channel: str, out_dir: str, n_workers: int, tile_size: int, overlap: int, ):
 
     if not osp.exists(out_dir):
         os.makedirs(out_dir)
@@ -160,14 +158,19 @@ def main(in_path: str, ref_channel: str, out_dir: str, n_workers: int):
         ome = stack.ome_metadata
 
     cycle_size, ncycles, first_ref_position = get_cycle_composition(ome, ref_channel)
+    block_width = tile_size
+    block_height = tile_size
+    overlap = overlap
 
     warper = Warper()
-    warper.block_h = 1000
-    warper.block_w = 1000
-    warper.overlap = 50
+    warper.block_w = block_width
+    warper.block_h = block_height
+    warper.overlap = overlap
+
+
 
     # perform registration of full stack
-    register(in_path, out_dir, cycle_size, ncycles, first_ref_position, ome, warper)
+    register(in_path, out_dir, cycle_size, ncycles, first_ref_position, ome, warper, block_width, block_height, overlap)
 
     fin = datetime.now()
     print('time elapsed', fin - st)
@@ -179,6 +182,11 @@ if __name__ == '__main__':
     parser.add_argument('-c', type=str, required=True, help='channel for registration')
     parser.add_argument('-o', type=str, required=True, help='output dir')
     parser.add_argument('-n', type=int, default=1, help='multiprocessing: number of processes, default 1')
+    parser.add_argument('--tile_size', type=int, default=1000, help='size of a side of a square tile, ' +
+                                                                    'e.g. --tile_size 1000 = tile with dims 1000x1000px')
+    parser.add_argument('--overlap', type=int, default=50, help='size of the overlap for one side of the image,' +
+                                                                'e.g. --overlap 50 = left,right,top,bottom overlaps are 50px each')
+
     args = parser.parse_args()
 
-    main(args.i, args.c, args.o, args.n)
+    main(args.i, args.c, args.o, args.n, args.tile_size, args.overlap)
