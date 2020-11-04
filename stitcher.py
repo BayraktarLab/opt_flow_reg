@@ -35,10 +35,12 @@ def get_slices(arr: np.ndarray, hor_f: int, hor_t: int, ver_f: int, ver_t: int, 
     return big_image_slice, block_slice
 
 
-def stitch_plane(img_list: List[Image], page: int,
-                 x_nblocks: int, y_nblocks: int,
-                 block_shape: list, dtype,
-                 overlap: int, padding: dict, remap_dict: dict = None) -> Tuple[Image, Union[np.ndarray, None]]:
+def stitch_image(img_list: List[Image], slicer_info) -> Image:
+    x_nblocks = slicer_info['nblocks']['x']
+    y_nblocks = slicer_info['nblocks']['y']
+    block_shape = slicer_info['block_shape']
+    overlap = slicer_info['overlap']
+    padding = slicer_info['padding']
 
     x_axis = -1
     y_axis = -2
@@ -50,6 +52,7 @@ def stitch_plane(img_list: List[Image], page: int,
     big_image_y_size = (y_nblocks * block_y_size) - padding["top"] - padding["bottom"]
 
     big_image_shape = (big_image_y_size, big_image_x_size)
+    dtype = img_list[0].dtype
     big_image = np.zeros(big_image_shape, dtype=dtype)
 
     n = 0
