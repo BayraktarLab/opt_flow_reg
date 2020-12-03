@@ -1,133 +1,97 @@
-import copy
-
 import numpy as np
 
 Image = np.ndarray
 
 
-def split_image_into_blocks_of_size(arr: Image, block_w: int, block_h: int, overlap: int):
-    """ Splits image into blocks of given size.
-        block_w - block width
-        block_h - block height
+def get_tile(big_image: Image, hor_f: int, hor_t: int, ver_f: int, ver_t: int, overlap=0):
+    hor_f -= overlap
+    hor_t += overlap
+    ver_f -= overlap
+    ver_t += overlap
+
+    # check if tile is over image boundary
+    left_check = hor_f
+    top_check = ver_f
+    right_check = hor_t - big_image.shape[-1]
+    bot_check = ver_t - big_image.shape[-2]
+
+    left_pad_size = 0
+    top_pad_size = 0
+    right_pad_size = 0
+    bot_pad_size = 0
+
+    if left_check < 0:
+        left_pad_size = abs(left_check)
+        hor_f = 0
+    if top_check < 0:
+        top_pad_size = abs(top_check)
+        ver_f = 0
+    if right_check > 0:
+        right_pad_size = right_check
+        hor_t = big_image.shape[-1]
+    if bot_check > 0:
+        bot_pad_size = bot_check
+        ver_t = big_image.shape[-2]
+
+    tile_slice = (slice(ver_f, ver_t), slice(hor_f, hor_t))
+    tile = big_image[tile_slice]
+    padding = ((top_pad_size, bot_pad_size), (left_pad_size, right_pad_size))
+    if max(padding) > (0, 0):
+        tile = np.pad(tile, padding, mode='constant')
+    return tile
+
+
+def split_image_into_tiles_of_size(arr: np.ndarray, tile_w: int, tile_h: int, overlap: int):
+    """ Splits image into tiles by size of tile.
+        tile_w - tile width
+        tile_h - tile height
     """
-    img_width, img_height = arr.shape[-1], arr.shape[-2]
     x_axis = -1
     y_axis = -2
-    arr_shape = list(arr.shape)
-    dtype = arr.dtype
+    arr_width, arr_height = arr.shape[x_axis], arr.shape[y_axis]
 
-    x_nblocks = arr_shape[x_axis] // block_w if arr_shape[x_axis] % block_w == 0 else (arr_shape[x_axis] // block_w) + 1
-    y_nblocks = arr_shape[y_axis] // block_h if arr_shape[y_axis] % block_h == 0 else (arr_shape[y_axis] // block_h) + 1
+    x_ntiles = arr_width // tile_w if arr_width % tile_w == 0 else (arr_width // tile_w) + 1
+    y_ntiles = arr_height // tile_h if arr_height % tile_h == 0 else (arr_height // tile_h) + 1
 
-    # check if image size is divisible by block size
-    pad_shape = copy.copy(arr_shape)
-    if img_height % block_h != 0:
-        do_horizontal_padding = True
-    else:
-        do_horizontal_padding = False
-
-    if img_width % block_w != 0:
-        do_vertical_padding = True
-    else:
-        do_vertical_padding = False
-
-    blocks = []
+    tiles = []
 
     # row
-    for i in range(0, y_nblocks):
-        # height of this block
-        ver_f = block_h * i
-        ver_t = ver_f + block_h
-
-        if overlap != 0:
-            # vertical overlap of this block
-            if i == 0:
-                ver_t += overlap
-            elif i == y_nblocks - 1:
-                ver_f -= overlap
-                ver_t = img_height
-            else:
-                ver_f -= overlap
-                ver_t += overlap
+    for i in range(0, y_ntiles):
+        # height of this tile
+        ver_f = tile_h * i
+        ver_t = ver_f + tile_h
 
         # col
-        for j in range(0, x_nblocks):
+        for j in range(0, x_ntiles):
+            # width of this tile
+            hor_f = tile_w * j
+            hor_t = hor_f + tile_w
 
-            # width of this block
-            hor_f = block_w * j
-            hor_t = hor_f + block_w
+            tile = get_tile(arr, hor_f, hor_t, ver_f, ver_t, overlap)
 
-            if overlap != 0:
-                # horizontal overlap of this block
-                if j == 0:
-                    hor_t += overlap
-                elif j == x_nblocks - 1:
-                    hor_f -= overlap
-                    hor_t = img_width
-                else:
-                    hor_f -= overlap
-                    hor_t += overlap
+            tiles.append(tile)
 
-            block = arr[ver_f: ver_t, hor_f: hor_t]
-
-            # handling cases when image size is not divisible by block size
-            if j == x_nblocks - 1 and do_horizontal_padding:
-                pad_shape = list(block.shape)
-                rest = img_width % block_w
-                pad_shape[x_axis] = block_w - rest
-                pad_shape[y_axis] = block.shape[y_axis]  # width of padding
-                block = np.concatenate((block, np.zeros(pad_shape, dtype=dtype)), axis=x_axis)
-
-            if i == y_nblocks - 1 and do_vertical_padding:
-                pad_shape = list(block.shape)
-                rest = img_height % block_h
-                pad_shape[x_axis] = block.shape[x_axis]
-                pad_shape[y_axis] = block_h - rest  # height of padding
-                block = np.concatenate((block, np.zeros(pad_shape, dtype=dtype)), axis=y_axis)
-
-            # handling cases when of overlap on the edge images
-            if overlap != 0:
-                overlap_pad_shape = list(block.shape)
-                if i == 0:
-                    overlap_pad_shape[x_axis] = block.shape[x_axis]
-                    overlap_pad_shape[y_axis] = overlap
-                    block = np.concatenate((np.zeros(overlap_pad_shape, dtype=dtype), block), axis=0)
-                    # print('i0', block.shape)
-                elif i == y_nblocks - 1:
-                    overlap_pad_shape[x_axis] = block.shape[x_axis]
-                    overlap_pad_shape[y_axis] = overlap
-                    block = np.concatenate((block, np.zeros(overlap_pad_shape, dtype=dtype)), axis=0)
-                    # print('i-1', block.shape)
-                if j == 0:
-                    overlap_pad_shape[x_axis] = overlap
-                    overlap_pad_shape[y_axis] = block.shape[y_axis]
-                    block = np.concatenate((np.zeros(overlap_pad_shape, dtype=dtype), block), axis=1)
-                    # print('j0', block.shape)
-                elif j == x_nblocks - 1:
-                    overlap_pad_shape[x_axis] = overlap
-                    overlap_pad_shape[y_axis] = block.shape[y_axis]
-                    block = np.concatenate((block, np.zeros(overlap_pad_shape, dtype=dtype)), axis=1)
-                    # print('j-1', block.shape)
-            # print('\n')
-            blocks.append(block)
-
-    block_shape = [block_h, block_w]
-    nblocks = dict(x=x_nblocks, y=y_nblocks)
+    tile_shape = [tile_h, tile_w]
+    ntiles = dict(x=x_ntiles, y=y_ntiles)
     padding = dict(left=0, right=0, top=0, bottom=0)
-    padding["right"] = block_w - (img_width % block_w)
-    padding["bottom"] = block_h - (img_height % block_h)
+    if arr_width % tile_w == 0:
+        padding["right"] = 0
+    else:
+        padding["right"] = tile_w - (arr_width % tile_w)
+    if arr_height % tile_h == 0:
+        padding["bottom"] = 0
+    else:
+        padding["bottom"] = tile_h - (arr_height % tile_h)
+    info = dict(tile_shape=tile_shape, ntiles=ntiles, overlap=overlap, padding=padding)
+    return tiles, info
 
-    info = dict(block_shape=block_shape, nblocks=nblocks, overlap=overlap, padding=padding)
 
-    return blocks, info
-
-
-def split_by_nblocks(arr: Image, x_nblocks: int, y_nblocks: int, overlap: int):
-    """ Splits image into blocks by number of block.
-        x_nblocks - number of blocks horizontally
-        y_nblocks - number of blocks vertically
+def split_by_ntiles(arr: np.ndarray, x_ntiles: int, y_ntiles: int, overlap: int):
+    """ Splits image into tiles by number of tile.
+        x_ntiles - number of tiles horizontally
+        y_ntiles - number of tiles vertically
     """
     img_width, img_height = arr.shape[-1], arr.shape[-2]
-    block_w = img_width // x_nblocks
-    block_h = img_height // y_nblocks
-    return split_image_into_blocks_of_size(arr, block_w, block_h, overlap)
+    tile_w = img_width // x_ntiles
+    tile_h = img_height // y_ntiles
+    return split_image_into_tiles_of_size(arr, tile_w, tile_h, overlap)

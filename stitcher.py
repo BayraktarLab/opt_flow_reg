@@ -1,71 +1,77 @@
 from typing import List, Tuple, Union
-
 import numpy as np
+
 
 Image = np.ndarray
 
 
+def get_slices(big_image: Image, hor_f: int, hor_t: int, ver_f: int, ver_t: int, padding: dict, overlap=0):
+    # check if tile is over image boundary
+    left_check = hor_f - padding['left']
+    top_check = ver_f - padding['top']
+    right_check = hor_t - big_image.shape[-1]
+    bot_check = ver_t - big_image.shape[-2]
+
+    left_pad_size = 0
+    top_pad_size = 0
+    right_pad_size = 0
+    bot_pad_size = 0
+
+    if left_check < 0:
+        left_pad_size = abs(left_check)
+        hor_f = 0
+    if top_check < 0:
+        top_pad_size = abs(top_check)
+        ver_f = 0
+    if right_check > 0:
+        right_pad_size = right_check
+        hor_t = big_image.shape[-1]
+    if bot_check > 0:
+        bot_pad_size = bot_check
+        ver_t = big_image.shape[-2]
+
+    big_image_slice = (slice(ver_f, ver_t), slice(hor_f, hor_t))
+    tile_shape = (ver_t - ver_f, hor_t - hor_f)
+    tile_slice = (slice(top_pad_size + overlap, tile_shape[-2] + overlap),
+                  slice(left_pad_size + overlap, tile_shape[-1] + overlap))
+
+    return big_image_slice, tile_slice
+
+
 def stitch_image(img_list: List[Image], slicer_info: dict) -> Image:
 
-    x_nblocks = slicer_info['nblocks']['x']
-    y_nblocks = slicer_info['nblocks']['y']
-    block_shape = slicer_info['block_shape']
+    x_ntiles = slicer_info['ntiles']['x']
+    y_ntiles = slicer_info['ntiles']['y']
+    tile_shape = slicer_info['tile_shape']
     overlap = slicer_info['overlap']
     padding = slicer_info['padding']
 
     x_axis = -1
     y_axis = -2
 
-    block_x_size = block_shape[x_axis]
-    block_y_size = block_shape[y_axis]
+    tile_x_size = tile_shape[x_axis]
+    tile_y_size = tile_shape[y_axis]
 
-    padding_left = padding["left"]
-    padding_right = padding["right"]
-    padding_top = padding["top"]
-    padding_bottom = padding["bottom"]
+    big_image_x_size = (x_ntiles * tile_x_size) - padding["left"] - padding["right"]
+    big_image_y_size = (y_ntiles * tile_y_size) - padding["top"] - padding["bottom"]
 
-    big_image_x_size = (x_nblocks * block_x_size) - padding_left - padding_right
-    big_image_y_size = (y_nblocks * block_y_size) - padding_top - padding_bottom
-    dtype = img_list[0].dtype
     big_image_shape = (big_image_y_size, big_image_x_size)
+    dtype = img_list[0].dtype
     big_image = np.zeros(big_image_shape, dtype=dtype)
 
-    big_image_slice = [slice(None), slice(None)]
-    block_slice = [slice(None), slice(None)]
-
     n = 0
-    for i in range(0, y_nblocks):
-        yf = i * block_y_size
-        yt = yf + block_y_size
+    for i in range(0, y_ntiles):
+        ver_f = i * tile_y_size
+        ver_t = ver_f + tile_y_size
 
-        if i == 0:
-            block_slice[y_axis] = slice(0 + overlap + padding_top, block_y_size + overlap)
-            big_image_slice[y_axis] = slice(padding_top, yt)
-        elif i == y_nblocks - 1:
-            block_slice[y_axis] = slice(0 + overlap, block_y_size + overlap - padding_bottom)
-            big_image_slice[y_axis] = slice(yf, yt - padding_bottom)
-        else:
-            block_slice[y_axis] = slice(0 + overlap, block_y_size + overlap)
-            big_image_slice[y_axis] = slice(yf, yt)
+        for j in range(0, x_ntiles):
+            hor_f = j * tile_x_size
+            hor_t = hor_f + tile_x_size
 
-        for j in range(0, x_nblocks):
-            xf = j * block_x_size
-            xt = xf + block_x_size
+            big_image_slice, tile_slice = get_slices(big_image, hor_f, hor_t, ver_f, ver_t, padding, overlap)
+            tile = img_list[n]
 
-            if j == 0:
-                block_slice[x_axis] = slice(0 + overlap + padding_left, block_x_size + overlap)
-                big_image_slice[x_axis] = slice(padding_left, xt)
-            elif j == x_nblocks - 1:
-                block_slice[x_axis] = slice(0 + overlap, block_x_size + overlap - padding_right)
-                big_image_slice[x_axis] = slice(xf, xt - padding_right)
-            else:
-                block_slice[x_axis] = slice(0 + overlap, block_x_size + overlap)
-                big_image_slice[x_axis] = slice(xf, xt)
-
-            block = img_list[n]
-
-            big_image[tuple(big_image_slice)] = block[tuple(block_slice)]
-
+            big_image[tuple(big_image_slice)] = tile[tuple(tile_slice)]
             n += 1
 
     return big_image
