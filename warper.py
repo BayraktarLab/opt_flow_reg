@@ -3,7 +3,7 @@ from typing import Tuple, List
 import numpy as np
 import cv2 as cv
 
-from slicer import split_image_into_blocks_of_size
+from slicer import split_image_into_tiles_of_size
 from stitcher import stitch_image
 Image = np.ndarray
 
@@ -21,7 +21,7 @@ class Warper:
 
     def warp(self):
         if self.image is not None:
-            self.image_tiles, self.slicer_info = split_image_into_blocks_of_size(self.image, self.block_w, self.block_h, self.overlap)
+            self.image_tiles, self.slicer_info = split_image_into_tiles_of_size(self.image, self.block_w, self.block_h, self.overlap)
             self.image = None  # cleanup
 
         warped_image_tiles = self.warp_image_tiles(self.image_tiles, self.flow_tiles)

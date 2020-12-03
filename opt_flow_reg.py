@@ -10,7 +10,7 @@ import tifffile as tif
 import cv2 as cv
 import dask
 
-from slicer import split_image_into_blocks_of_size
+from slicer import split_image_into_tiles_of_size
 from metadata_handling import get_cycle_composition
 from warper import Warper
 Image = np.ndarray
@@ -39,9 +39,8 @@ def reg_big_image(ref_img: Image, moving_img: Image, warper, block_width, block_
         Other methods either to complex to work with or don't have proper API for Python.
     """
 
-    ref_img_tiles, ref_img_slice_info = split_image_into_blocks_of_size(ref_img, block_width, block_height, overlap)
-    moving_img_tiles, moving_image_slice_info = split_image_into_blocks_of_size(moving_img, block_width, block_height, overlap)
-
+    ref_img_tiles, ref_img_slice_info = split_image_into_tiles_of_size(ref_img, block_width, block_height, overlap)
+    moving_img_tiles, moving_image_slice_info = split_image_into_tiles_of_size(moving_img, block_width, block_height, overlap)
     reg_task = []
     for t in range(0, len(ref_img_tiles)):
         reg_task.append(dask.delayed(register_tiles)(ref_img_tiles[t], moving_img_tiles[t]))
