@@ -35,7 +35,7 @@ def find_where_ref_channel(ome_meta: str, ref_channel: str):
         fluors = [re.sub(r'^(c|cyc|cycle)\d+(\s+|_)', '', fluor) for fluor in channel_fluors]  # remove cycle name
     else:
         fluors = None
-    names = [re.sub(r'^(c|cyc|cycle)\d+(\s+|_)^c\d+\s+', '', name) for name in channel_names]
+    names = [re.sub(r'^(c|cyc|cycle)\d+(\s+|_)', '', name) for name in channel_names]
 
     # check if reference channel is present somewhere
     if ref_channel in names:
