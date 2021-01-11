@@ -2,6 +2,7 @@ from typing import Tuple, List
 
 import numpy as np
 import cv2 as cv
+import dask
 
 from slicer import split_image_into_tiles_of_size
 from stitcher import stitch_image
@@ -36,12 +37,11 @@ class Warper:
 
         return stitched_warped_image
 
-    #TODO for some reasons dask hangs trying to run wapring in parallel so I need to work on it later
     def make_flow_for_remap(self, flow):
         h, w = flow.shape[:2]
         new_flow = np.negative(flow)
-        new_flow[:, :, 0] += np.arange(w)
-        new_flow[:, :, 1] += np.arange(h)[:, np.newaxis]
+        new_flow[:, :, 0] = new_flow[:, :, 0] + np.arange(w)
+        new_flow[:, :, 1] = new_flow[:, :, 1] + np.arange(h).reshape(-1, 1)
         return new_flow
 
 
@@ -54,6 +54,7 @@ class Warper:
 
     def warp_image_tiles(self, image_tiles: List[Image], flow_tiles: List[np.ndarray]) -> List[Image]:
         warped_tiles = []
+        # parallelizing this loop is not worth it - it only increases memory consumption and processing time
         for t in range(0, len(image_tiles)):
             warped_tiles.append(self.warp_with_flow(image_tiles[t], flow_tiles[t]))
 
