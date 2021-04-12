@@ -22,21 +22,20 @@ def convertu8(img: Image) -> Image:
 
 
 def register_tiles(ref_img: np.ndarray, moving_img: np.ndarray) -> np.ndarray:
-    ref_img_u8 = cv.normalize(ref_img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
-    moving_img_u8 = cv.normalize(moving_img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
-
-    return cv.calcOpticalFlowFarneback(moving_img_u8, ref_img_u8,
-                                       None, pyr_scale=0.5, levels=3,
-                                       winsize=21,
-                                       iterations=3, poly_n=7, poly_sigma=1.3,
-                                       flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
+    res = cv.calcOpticalFlowFarneback(convertu8(moving_img), convertu8(ref_img),
+                                      None, pyr_scale=0.5, levels=3,
+                                      winsize=21,
+                                      iterations=3, poly_n=7, poly_sigma=1.3,
+                                      flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
+    gc.collect()
+    return res
 
 
 def reg_big_image(ref_img: Image, moving_img: Image, warper, block_width, block_height, overlap) -> Tuple[Image, List[np.ndarray]]:
     """ Calculates optical flow from moving_img to ref_img.
         Image is divided into pieces to decrease memory consumption.
         Currently working optical flow method is Farneback.
-        Other methods either to complex to work with or don't have proper API for Python.
+        Other methods either too complex to work with or don't have proper API for Python.
     """
 
     ref_img_tiles, ref_img_slice_info = split_image_into_tiles_of_size(ref_img, block_width, block_height, overlap)
@@ -50,13 +49,13 @@ def reg_big_image(ref_img: Image, moving_img: Image, warper, block_width, block_
     flow_tiles = list(flow_tiles)
 
     del ref_img_tiles, ref_img_slice_info
-
+    gc.collect()
     print(datetime.now(), 'warping reference channel tiles')
     warper.image_tiles = moving_img_tiles
     warper.slicer_info = moving_image_slice_info
     warper.flow_tiles = flow_tiles
     warped_moving_image = warper.warp()
-
+    gc.collect()
     return warped_moving_image, flow_tiles
 
 
@@ -65,15 +64,17 @@ def channel_saving_first_cycle(writer, image, ref_position_in_cycle, cycle_size,
         for c in range(0, ref_position_in_cycle):
             key = cycle_number * cycle_size + c
             writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
-
+            gc.collect()
     writer.save(image, photometric='minisblack', description=meta)
     del image
+    gc.collect()
 
     # if there are other channels after first ref channel warp and write them
     if ref_position_in_cycle != cycle_size - 1:
         for c in range(ref_position_in_cycle + 1, cycle_size):
             key = cycle_number * cycle_size + c
             writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
+            gc.collect()
 
 
 def channel_saving(writer, warper, image, flow_tiles, ref_position_in_cycle, cycle_size, cycle_number, in_path, meta):
@@ -84,9 +85,11 @@ def channel_saving(writer, warper, image, flow_tiles, ref_position_in_cycle, cyc
             warper.flow_tiles = flow_tiles
             warped_image = warper.warp()
             writer.save(warped_image, photometric='minisblack', description=meta)
+            gc.collect()
 
     writer.save(image, photometric='minisblack', description=meta)
     del image
+    gc.collect()
 
     # if there are other channels after first ref channel warp and write them
     if ref_position_in_cycle != cycle_size - 1:
@@ -96,6 +99,7 @@ def channel_saving(writer, warper, image, flow_tiles, ref_position_in_cycle, cyc
             warper.flow_tiles = flow_tiles
             warped_image = warper.warp()
             writer.save(warped_image, photometric='minisblack', description=meta)
+            gc.collect()
 
 
 def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_position_in_cycle: int, meta: str, warper, block_width, block_height, overlap):
@@ -119,6 +123,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
             # register and warp 2nd ref image and get optical flow
             im2_warped, flow = reg_big_image(im1, im2, warper, block_width, block_height, overlap)
             del im2
+            gc.collect()
             print(datetime.now(), 'warping and writing to file the rest of the channels')
 
             channel_saving_first_cycle(TW_img, im1, ref_position_in_cycle, cycle_size, i, in_path, meta)
@@ -132,6 +137,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
             im2 = tif.imread(in_path, key=next_ref_id)
             im2_warped, flow = reg_big_image(im1, im2, warper, block_width, block_height, overlap)
             del im2
+            gc.collect()
             print(datetime.now(), 'warping and writing to file the rest of the channels')
             channel_saving(TW_img, warper, im2_warped, flow, ref_position_in_cycle, cycle_size, i+1, in_path, meta)
 
@@ -165,7 +171,6 @@ def main(in_path: str, ref_channel: str, out_dir: str, n_workers: int, tile_size
     warper.block_w = block_width
     warper.block_h = block_height
     warper.overlap = overlap
-
 
 
     # perform registration of full stack
