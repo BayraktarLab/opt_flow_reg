@@ -67,9 +67,9 @@ def channel_saving_first_cycle(writer, image, ref_position_in_cycle, cycle_size,
     if ref_position_in_cycle != 0:
         for c in range(0, ref_position_in_cycle):
             key = cycle_number * cycle_size + c
-            writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
+            writer.save(tif.imread(in_path, key=key), contiguous=True, photometric='minisblack', description=meta)
             gc.collect()
-    writer.save(image, photometric='minisblack', description=meta)
+    writer.save(image, contiguous=True, photometric='minisblack', description=meta)
     del image
     gc.collect()
 
@@ -77,7 +77,7 @@ def channel_saving_first_cycle(writer, image, ref_position_in_cycle, cycle_size,
     if ref_position_in_cycle != cycle_size - 1:
         for c in range(ref_position_in_cycle + 1, cycle_size):
             key = cycle_number * cycle_size + c
-            writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
+            writer.save(tif.imread(in_path, key=key), contiguous=True, photometric='minisblack', description=meta)
             gc.collect()
 
 
@@ -88,10 +88,10 @@ def channel_saving(writer, warper, image, flow_tiles, ref_position_in_cycle, cyc
             warper.image = tif.imread(in_path, key=key)
             warper.flow_tiles = flow_tiles
             warped_image = warper.warp()
-            writer.save(warped_image, photometric='minisblack', description=meta)
+            writer.save(warped_image, contiguous=True, photometric='minisblack', description=meta)
             gc.collect()
 
-    writer.save(image, photometric='minisblack', description=meta)
+    writer.save(image, contiguous=True, photometric='minisblack', description=meta)
     del image
     gc.collect()
 
@@ -102,7 +102,7 @@ def channel_saving(writer, warper, image, flow_tiles, ref_position_in_cycle, cyc
             warper.image = tif.imread(in_path, key=key)
             warper.flow_tiles = flow_tiles
             warped_image = warper.warp()
-            writer.save(warped_image, photometric='minisblack', description=meta)
+            writer.save(warped_image, contiguous=True, photometric='minisblack', description=meta)
             gc.collect()
 
 
