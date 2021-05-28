@@ -13,6 +13,7 @@ import dask
 from slicer import split_image_into_tiles_of_size
 from metadata_handling import get_cycle_composition
 from warper import Warper
+from opt_flow_methods import farneback, denselk, deepflow, rlof, pcaflow
 Image = np.ndarray
 
 
@@ -21,28 +22,31 @@ def convertu8(img: Image) -> Image:
     return u8img
 
 
-def register_tiles(ref_img: np.ndarray, moving_img: np.ndarray) -> np.ndarray:
-    res = cv.calcOpticalFlowFarneback(convertu8(moving_img), convertu8(ref_img),
-                                      None, pyr_scale=0.5, levels=3,
-                                      winsize=21,
-                                      iterations=3, poly_n=7, poly_sigma=1.3,
-                                      flags=cv.OPTFLOW_FARNEBACK_GAUSSIAN)
+def register_tiles(ref_img: Image, mov_img: Image, method) -> np.ndarray:
+    if method == 'farneback':
+        flow = farneback(convertu8(mov_img), convertu8(ref_img))
+    elif method == 'denselk':
+        flow = denselk(convertu8(mov_img), convertu8(ref_img))
+    elif method == 'deepflow':
+        flow = deepflow(convertu8(mov_img), convertu8(ref_img))
+    elif method == 'rlof':
+        flow = rlof(convertu8(mov_img), convertu8(ref_img))
+    elif method == 'pcaflow':
+        flow = pcaflow(convertu8(mov_img), convertu8(ref_img))
     gc.collect()
-    return res
+    return flow
 
 
-def reg_big_image(ref_img: Image, moving_img: Image, warper, block_width, block_height, overlap) -> Tuple[Image, List[np.ndarray]]:
+def reg_big_image(ref_img: Image, moving_img: Image, warper, block_width, block_height, overlap, method) -> Tuple[Image, List[np.ndarray]]:
     """ Calculates optical flow from moving_img to ref_img.
         Image is divided into pieces to decrease memory consumption.
-        Currently working optical flow method is Farneback.
-        Other methods either too complex to work with or don't have proper API for Python.
     """
 
     ref_img_tiles, ref_img_slice_info = split_image_into_tiles_of_size(ref_img, block_width, block_height, overlap)
     moving_img_tiles, moving_image_slice_info = split_image_into_tiles_of_size(moving_img, block_width, block_height, overlap)
     reg_task = []
     for t in range(0, len(ref_img_tiles)):
-        reg_task.append(dask.delayed(register_tiles)(ref_img_tiles[t], moving_img_tiles[t]))
+        reg_task.append(dask.delayed(register_tiles)(ref_img_tiles[t], moving_img_tiles[t], method))
 
     print(datetime.now(), 'registering reference channel tiles')
     flow_tiles = dask.compute(*reg_task)
@@ -63,9 +67,9 @@ def channel_saving_first_cycle(writer, image, ref_position_in_cycle, cycle_size,
     if ref_position_in_cycle != 0:
         for c in range(0, ref_position_in_cycle):
             key = cycle_number * cycle_size + c
-            writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
+            writer.save(tif.imread(in_path, key=key), contiguous=True, photometric='minisblack', description=meta)
             gc.collect()
-    writer.save(image, photometric='minisblack', description=meta)
+    writer.save(image, contiguous=True, photometric='minisblack', description=meta)
     del image
     gc.collect()
 
@@ -73,7 +77,7 @@ def channel_saving_first_cycle(writer, image, ref_position_in_cycle, cycle_size,
     if ref_position_in_cycle != cycle_size - 1:
         for c in range(ref_position_in_cycle + 1, cycle_size):
             key = cycle_number * cycle_size + c
-            writer.save(tif.imread(in_path, key=key), photometric='minisblack', description=meta)
+            writer.save(tif.imread(in_path, key=key), contiguous=True, photometric='minisblack', description=meta)
             gc.collect()
 
 
@@ -84,10 +88,10 @@ def channel_saving(writer, warper, image, flow_tiles, ref_position_in_cycle, cyc
             warper.image = tif.imread(in_path, key=key)
             warper.flow_tiles = flow_tiles
             warped_image = warper.warp()
-            writer.save(warped_image, photometric='minisblack', description=meta)
+            writer.save(warped_image, contiguous=True, photometric='minisblack', description=meta)
             gc.collect()
 
-    writer.save(image, photometric='minisblack', description=meta)
+    writer.save(image, contiguous=True, photometric='minisblack', description=meta)
     del image
     gc.collect()
 
@@ -98,11 +102,13 @@ def channel_saving(writer, warper, image, flow_tiles, ref_position_in_cycle, cyc
             warper.image = tif.imread(in_path, key=key)
             warper.flow_tiles = flow_tiles
             warped_image = warper.warp()
-            writer.save(warped_image, photometric='minisblack', description=meta)
+            writer.save(warped_image, contiguous=True, photometric='minisblack', description=meta)
             gc.collect()
 
 
-def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_position_in_cycle: int, meta: str, warper, block_width, block_height, overlap):
+def register(in_path: str, out_dir: str,
+             cycle_size: int, ncycles: int, ref_position_in_cycle: int,
+             meta: str, warper, block_width, block_height, overlap, method):
     """ Read images and register them sequentially: 1<-2, 2<-3, 3<-4 etc.
         It is assumed that there is equal number of channels in each cycle.
     """
@@ -121,7 +127,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
             im1 = tif.imread(in_path, key=this_ref_id)
             im2 = tif.imread(in_path, key=next_ref_id)
             # register and warp 2nd ref image and get optical flow
-            im2_warped, flow = reg_big_image(im1, im2, warper, block_width, block_height, overlap)
+            im2_warped, flow = reg_big_image(im1, im2, warper, block_width, block_height, overlap, method)
             del im2
             gc.collect()
             print(datetime.now(), 'warping and writing to file the rest of the channels')
@@ -135,7 +141,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
         else:
             im1 = im2_warped  # this_ref_id # reuse warped image from previous cycle
             im2 = tif.imread(in_path, key=next_ref_id)
-            im2_warped, flow = reg_big_image(im1, im2, warper, block_width, block_height, overlap)
+            im2_warped, flow = reg_big_image(im1, im2, warper, block_width, block_height, overlap, method)
             del im2
             gc.collect()
             print(datetime.now(), 'warping and writing to file the rest of the channels')
@@ -147,7 +153,7 @@ def register(in_path: str, out_dir: str, cycle_size: int, ncycles: int, ref_posi
     TW_img.close()
 
 
-def main(in_path: str, ref_channel: str, out_dir: str, n_workers: int, tile_size: int, overlap: int, ):
+def main(in_path: str, ref_channel: str, out_dir: str, n_workers: int, tile_size: int, overlap: int, method: str):
 
     if not osp.exists(out_dir):
         os.makedirs(out_dir)
@@ -156,6 +162,12 @@ def main(in_path: str, ref_channel: str, out_dir: str, n_workers: int, tile_size
         dask.config.set({'scheduler': 'synchronous'})
     else:
         dask.config.set({'num_workers': n_workers, 'scheduler': 'processes'})
+
+    avail_methods = ('farneback', 'denselk', 'deepflow', 'rlof', 'pcaflow')
+    if method not in avail_methods:
+        raise ValueError('Provided opt flow method is not recognised. ' +
+                         '\nAvailable methods: ' + str(avail_methods))
+    print('Using method', method)
 
     st = datetime.now()
 
@@ -172,9 +184,11 @@ def main(in_path: str, ref_channel: str, out_dir: str, n_workers: int, tile_size
     warper.block_h = block_height
     warper.overlap = overlap
 
-
     # perform registration of full stack
-    register(in_path, out_dir, cycle_size, ncycles, first_ref_position, ome, warper, block_width, block_height, overlap)
+    register(in_path, out_dir,
+             cycle_size, ncycles,
+             first_ref_position, ome, warper,
+             block_width, block_height, overlap, method)
 
     fin = datetime.now()
     print('time elapsed', fin - st)
@@ -188,9 +202,10 @@ if __name__ == '__main__':
     parser.add_argument('-n', type=int, default=1, help='multiprocessing: number of processes, default 1')
     parser.add_argument('--tile_size', type=int, default=1000, help='size of a side of a square tile, ' +
                                                                     'e.g. --tile_size 1000 = tile with dims 1000x1000px')
-    parser.add_argument('--overlap', type=int, default=50, help='size of the overlap for one side of the image,' +
+    parser.add_argument('--overlap', type=int, default=100, help='size of the overlap for one side of the image,' +
                                                                 'e.g. --overlap 50 = left,right,top,bottom overlaps are 50px each')
-
+    parser.add_argument('--method', type=str, default='rlof',
+                        help='available methods: farneback, denselk, deepflow, rlof, pcaflow')
     args = parser.parse_args()
 
-    main(args.i, args.c, args.o, args.n, args.tile_size, args.overlap)
+    main(args.i, args.c, args.o, args.n, args.tile_size, args.overlap, args.method)
