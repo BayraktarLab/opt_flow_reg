@@ -204,7 +204,7 @@ if __name__ == '__main__':
                                                                     'e.g. --tile_size 1000 = tile with dims 1000x1000px')
     parser.add_argument('--overlap', type=int, default=100, help='size of the overlap for one side of the image,' +
                                                                 'e.g. --overlap 50 = left,right,top,bottom overlaps are 50px each')
-    parser.add_argument('--method', type=str, default='rlof',
+    parser.add_argument('--method', type=str, default='farneback',
                         help='available methods: farneback, denselk, deepflow, rlof, pcaflow')
     args = parser.parse_args()
 

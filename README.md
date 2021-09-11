@@ -1,7 +1,7 @@
 ## Optical flow based registration for immunofluorescence images
 
 These scripts perform fine registration using warping. 
-A map for warping is calculated using RLOF optical flow algorithm, by OpenCV.
+A map for warping is calculated using Farneback optical flow algorithm, by OpenCV.
 Although images are MINMAX normalized during processing, optical flow algorithms expect images to have 
 similar pixel intensities. 
 
