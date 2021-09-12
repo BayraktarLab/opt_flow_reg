@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/405296622.svg)](https://zenodo.org/badge/latestdoi/405296622)
 ## Optical flow based registration for immunofluorescence images
 
 These scripts perform fine registration using warping. 
