@@ -1,86 +1,109 @@
+import re
 import xml.etree.ElementTree as ET
 from io import StringIO
-import re
+from typing import List
 
 XML = ET.ElementTree
 
 
-def str_to_xml(xmlstr: str):
-    """ Converts str to xml and strips namespaces """
-    it = ET.iterparse(StringIO(xmlstr))
-    for _, el in it:
-        _, _, el.tag = el.tag.rpartition('}')
-    root = it.root
-    return root
+class DatasetStructure:
+    def __init__(self):
+        self.ref_channel_name = "DAPI"
+        self.ome_meta_str = ""
 
+    def get_dataset_structure(self):
+        ome_xml = self._str_to_xml(self.ome_meta_str)
+        channel_names, channel_fluors, nchannels, nzplanes = self._extract_channel_info(
+            ome_xml
+        )
+        channel_names_cleaned, ref_ids = self._find_where_ref_channel(
+            channel_names, channel_fluors
+        )
+        return self._get_stack_structure(ref_ids, nchannels, nzplanes)
 
-def extract_channel_info(xml: XML):
-    channels = xml.find('Image').find('Pixels').findall('Channel')
-    channel_names = [ch.get('Name') for ch in channels]
-    channel_ids = [ch.get('ID') for ch in channels]
-    channel_fluors = []
-    for ch in channels:
-        if 'Fluor' in ch.attrib:
-            channel_fluors.append(ch.get('Fluor'))
-    return channels, channel_names, channel_ids, channel_fluors
+    def _str_to_xml(self, xmlstr: str):
+        """Converts str to xml and strips namespaces"""
+        it = ET.iterparse(StringIO(xmlstr))
+        for _, el in it:
+            _, _, el.tag = el.tag.rpartition("}")
+        root = it.root
+        return root
 
+    def _extract_channel_info(self, ome_xml: XML):
+        channels = ome_xml.find("Image").find("Pixels").findall("Channel")
+        channel_names = [ch.get("Name") for ch in channels]
+        channel_fluors = []
+        for ch in channels:
+            if "Fluor" in ch.attrib:
+                channel_fluors.append(ch.get("Fluor"))
+        image_attribs = ome_xml.find("Image").find("Pixels").attrib
+        nchannels = int(image_attribs.get("SizeC", 1))
+        nzplanes = int(image_attribs.get("SizeZ", 1))
+        return channel_names, channel_fluors, nchannels, nzplanes
 
-def find_where_ref_channel(ome_meta: str, ref_channel: str):
-    """ Find if reference channel is in fluorophores or channel names and return them"""
+    def _strip_cycle_info(self, name):
+        ch_name = re.sub(r"^(c|cyc|cycle)\d+(\s+|_)", "", name)  # strip start
+        ch_name2 = re.sub(r"(-\d+)?(_\d+)?$", "", ch_name)  # strip end
+        return ch_name2
 
-    channels, channel_names, channel_ids, channel_fluors = extract_channel_info(str_to_xml(ome_meta))
+    def _filter_ref_channel_ids(self, channels: List[str]) -> List[int]:
+        ref_ch = self._strip_cycle_info(self.ref_channel_name)
+        ref_ids = []
+        for _id, ch in enumerate(channels):
+            if re.match(ref_ch, ch, re.IGNORECASE):
+                ref_ids.append(_id)
+        return ref_ids
 
-    # strip cycle id from channel name and fluor name
-    if channel_fluors != []:
-        fluors = [re.sub(r'^(c|cyc|cycle)\d+(\s+|_)', '', fluor) for fluor in channel_fluors]  # remove cycle name
-    else:
-        fluors = None
-    names = [re.sub(r'^(c|cyc|cycle)\d+(\s+|_)', '', name) for name in channel_names]
-
-    # check if reference channel is present somewhere
-    if ref_channel in names:
-        matches = names
-    elif fluors is not None and ref_channel in fluors:
-        matches = fluors
-    else:
-        if fluors is not None:
-            message = 'Incorrect reference channel. Available channel names: {names}, fluors: {fluors}'
-            raise ValueError(message.format(names=', '.join(set(names)), fluors=', '.join(set(fluors))))
+    def _find_where_ref_channel(
+        self, channel_names: List[str], channel_fluors: List[str]
+    ):
+        """Find if reference channel is in fluorophores or channel names and return them"""
+        # strip cycle id from channel name and fluor name
+        if channel_fluors != []:
+            fluors = [
+                self._strip_cycle_info(fluor) for fluor in channel_fluors
+            ]  # remove cycle name
         else:
-            message = 'Incorrect reference channel. Available channel names: {names}'
-            raise ValueError(message.format(names=', '.join(set(names))))
+            fluors = None
+        names = [self._strip_cycle_info(name) for name in channel_names]
 
-    return matches
+        # check if reference channel is present somewhere
+        if self.ref_channel_name in names:
+            cleaned_channel_names = names
+        elif fluors is not None and self.ref_channel_name in fluors:
+            cleaned_channel_names = fluors
 
-
-def get_cycle_composition(xmlstr: str, ref_channel: str):
-    matches = find_where_ref_channel(xmlstr, ref_channel)
-
-    # encode reference channels as 1 other 0
-
-    channels = []
-    for i, channel in enumerate(matches):
-        if channel == ref_channel:
-            channels.append(1)
         else:
-            channels.append(0)
+            if fluors is not None:
+                msg = (
+                    f"Incorrect reference channel {str(self.ref_channel_name)}. "
+                    + f"Available channel names: {str(set(names))}, fluors: {str(set(fluors))}"
+                )
+                raise ValueError(msg)
+            else:
+                msg = (
+                    f"Incorrect reference channel {str(self.ref_channel_name)}. "
+                    + f"Available channel names: {str(set(names))}"
+                )
+                raise ValueError(msg)
+        ref_ids = self._filter_ref_channel_ids(cleaned_channel_names)
+        return cleaned_channel_names, ref_ids
 
-    cycle_composition = []
-    for ch in channels:
-        cycle_composition.append(ch)
-        if sum(cycle_composition) == 2:
-            break
+    def _get_stack_structure(self, ref_ids, nchannels, nzplanes):
+        nchannels_per_cycle = ref_ids[1] - ref_ids[0]
+        ref_ch_position_in_cyc = ref_ids[0]
+        ncycles = nchannels // nchannels_per_cycle
 
-    first_ref_position = cycle_composition.index(1)
-    second_ref_position = None
-    for i, channel_type in enumerate(cycle_composition):
-        if channel_type == 1 and i != first_ref_position:
-            second_ref_position = i
-
-    if second_ref_position is None:
-        raise ValueError('Reference channel in second cycle is not found')
-
-    cycle_size = second_ref_position - first_ref_position
-    ncycles = len(channels) // cycle_size
-
-    return cycle_size, ncycles, first_ref_position
+        stack_structure = dict()
+        tiff_page = 0
+        for cyc in range(0, ncycles):
+            img_structure = dict()
+            for ch in range(0, nchannels_per_cycle):
+                img_structure[ch] = dict()
+                for z in range(0, nzplanes):
+                    img_structure[ch][z] = tiff_page
+                    tiff_page += 1
+            stack_structure[cyc] = dict()
+            stack_structure[cyc]["img_structure"] = img_structure
+            stack_structure[cyc]["ref_channel_id"] = ref_ch_position_in_cyc
+        return stack_structure

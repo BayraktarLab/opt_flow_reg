@@ -24,7 +24,9 @@ Currently does not support z-stacks.
 
 **`--overlap`**  overlap between tiles, default 100
 
-**`--method`**  optical flow method: farneback, denselk, deepflow, rlof, pcaflow, default rlof
+**`--num_pyr_lvl`**  number of pyramid levels. Default 3, 0 - will not use pyramids
+
+**`--num_iter`**  number of registration iterations per pyramid level. Default 3, cannot be less than 1
 
 ### Example usage
 
@@ -32,5 +34,5 @@ Currently does not support z-stacks.
 
 
 ### Dependencies
-`numpy tifffile opencv-contrib-python dask`
+`numpy tifffile opencv-contrib-python dask scikit-learn`
 
