@@ -1,7 +1,4 @@
 import gc
-import sys
-from math import log
-from pathlib import Path
 from typing import List, Tuple
 
 import cv2 as cv
@@ -17,7 +14,8 @@ from warper import Warper
 Image = np.ndarray
 
 
-def merge_two_flows(flow1, flow2):
+def merge_two_flows(flow1: np.ndarray, flow2: np.ndarray) -> np.ndarray:
+    # https://openresearchsoftware.metajnl.com/articles/10.5334/jors.380/
     # m_flow = of.combine_flows(flow1, flow2, 3, ref="s")
     if flow1.max() == 0:
         return flow2
@@ -127,14 +125,6 @@ class PyrRegOF:
         gc.collect()
         return m_flow
 
-    def _get_empty_flow(self, arr_shape):
-        w = arr_shape[1]
-        h = arr_shape[0]
-        empty_flow = np.zeros(arr_shape, dtype=np.float32)
-        empty_flow[:, :, 0] = empty_flow[:, :, 0] + np.arange(w)
-        empty_flow[:, :, 1] = empty_flow[:, :, 1] + np.arange(h).reshape(-1, 1)
-        return empty_flow
-
     def _generate_img_pyr(self, arr: Image) -> Tuple[List[Image], List[int]]:
         # Pyramid scales from smallest to largest
         if self.num_pyr_lvl < 0:
@@ -182,18 +172,16 @@ class PyrRegOF:
                 m_flow = self._merge_flow_in_tiles(m_flow, flow_list[i])
         return m_flow
 
-    def _merge_two_flows(self, flow1, flow2):
-        # m_flow = of.combine_flows(flow1, flow2, 3, ref="s")
-        m_flow = flow1 + cv.remap(flow2, -flow1, None, cv.INTER_LINEAR)
-        gc.collect()
-        return m_flow
-
-    def mutual_information_test(self, ref_arr, test_arr, init_arr):
+    def mutual_information_test(
+        self, ref_arr: Image, test_arr: Image, init_arr: Image
+    ) -> Tuple[float, float]:
         after_mi_score = mi_tiled(ref_arr, test_arr, self.tile_size)
         before_mi_score = mi_tiled(ref_arr, init_arr, self.tile_size)
         return after_mi_score, before_mi_score
 
-    def check_if_passes(self, ref_arr, test_arr, init_arr):
+    def check_if_passes(
+        self, ref_arr: Image, test_arr: Image, init_arr: Image
+    ) -> List[bool]:
         mi_scores = self.mutual_information_test(ref_arr, test_arr, init_arr)
         checks = list()
         checks.append(mi_scores[0] > mi_scores[1])
