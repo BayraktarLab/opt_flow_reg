@@ -31,7 +31,7 @@ def merge_two_flows(flow1, flow2):
 
 def mi_tiled(arr1: Image, arr2: Image, tile_size: int) -> float:
     if max(arr1.shape) / tile_size < 2:
-        return normalized_mutual_info_score(arr1, arr2)
+        return normalized_mutual_info_score(arr1.flatten(), arr2.flatten())
     else:
         indices = list(range(tile_size * tile_size, arr1.size, tile_size * tile_size))
         arr1_parts = np.array_split(arr1.flatten(), indices)
