@@ -8,14 +8,20 @@ XML = ET.ElementTree
 
 class DatasetStructure:
     def __init__(self):
-        self.ref_channel_name = "DAPI"
+        self._ref_ch = "DAPI"
         self.ome_meta_str = ""
+
+    @property
+    def ref_channel_name(self) -> str:
+        return self._ref_ch
+
+    @ref_channel_name.setter
+    def ref_channel_name(self, channel_name: str):
+        self._ref_ch = self._strip_cycle_info(channel_name)
 
     def get_dataset_structure(self):
         ome_xml = self._str_to_xml(self.ome_meta_str)
-        channel_names, channel_fluors, nchannels, nzplanes = self._extract_channel_info(
-            ome_xml
-        )
+        channel_names, channel_fluors, nchannels, nzplanes = self._extract_channel_info(ome_xml)
         channel_names_cleaned, ref_ids = self._find_where_ref_channel(
             channel_names, channel_fluors
         )
@@ -47,16 +53,13 @@ class DatasetStructure:
         return ch_name2
 
     def _filter_ref_channel_ids(self, channels: List[str]) -> List[int]:
-        ref_ch = self._strip_cycle_info(self.ref_channel_name)
         ref_ids = []
         for _id, ch in enumerate(channels):
-            if re.match(ref_ch, ch, re.IGNORECASE):
+            if re.match(self._ref_ch, ch, re.IGNORECASE):
                 ref_ids.append(_id)
         return ref_ids
 
-    def _find_where_ref_channel(
-        self, channel_names: List[str], channel_fluors: List[str]
-    ):
+    def _find_where_ref_channel(self, channel_names: List[str], channel_fluors: List[str]):
         """Find if reference channel is in fluorophores or channel names and return them"""
         # strip cycle id from channel name and fluor name
         if channel_fluors != []:
@@ -68,21 +71,20 @@ class DatasetStructure:
         names = [self._strip_cycle_info(name) for name in channel_names]
 
         # check if reference channel is present somewhere
-        if self.ref_channel_name in names:
+        if self._ref_ch in names:
             cleaned_channel_names = names
-        elif fluors is not None and self.ref_channel_name in fluors:
+        elif fluors is not None and self._ref_ch in fluors:
             cleaned_channel_names = fluors
-
         else:
             if fluors is not None:
                 msg = (
-                    f"Incorrect reference channel {str(self.ref_channel_name)}. "
+                    f"Incorrect reference channel {str(self._ref_ch)}. "
                     + f"Available channel names: {str(set(names))}, fluors: {str(set(fluors))}"
                 )
                 raise ValueError(msg)
             else:
                 msg = (
-                    f"Incorrect reference channel {str(self.ref_channel_name)}. "
+                    f"Incorrect reference channel {str(self._ref_ch)}. "
                     + f"Available channel names: {str(set(names))}"
                 )
                 raise ValueError(msg)
